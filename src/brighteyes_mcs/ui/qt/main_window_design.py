@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'main_window_design.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.11.1
+## Created by: Qt User Interface Compiler version 6.12.0
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -543,6 +543,12 @@ class Ui_MainWindowDesign(object):
         self.label_bitfile_signature_2.setObjectName(u"label_bitfile_signature_2")
 
         self.gridLayout_24.addWidget(self.label_bitfile_signature_2, 11, 1, 1, 1)
+
+        self.checkBox_fpga_connect_at_startup = QCheckBox(self.groupBox_22)
+        self.checkBox_fpga_connect_at_startup.setObjectName(u"checkBox_fpga_connect_at_startup")
+        self.checkBox_fpga_connect_at_startup.setChecked(True)
+
+        self.gridLayout_24.addWidget(self.checkBox_fpga_connect_at_startup, 13, 0, 1, 2)
 
         self.horizontalSpacer_24 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -4619,6 +4625,10 @@ class Ui_MainWindowDesign(object):
         self.label_123.setText(QCoreApplication.translate("MainWindowDesign", u"Bitfile Sign.", None))
         self.label_bitfile_signature.setText("")
         self.label_bitfile_signature_2.setText("")
+#if QT_CONFIG(tooltip)
+        self.checkBox_fpga_connect_at_startup.setToolTip(QCoreApplication.translate("MainWindowDesign", u"Open the FPGA session once when the application starts", None))
+#endif // QT_CONFIG(tooltip)
+        self.checkBox_fpga_connect_at_startup.setText(QCoreApplication.translate("MainWindowDesign", u"Connect to the FPGA at startup", None))
         self.groupBox_23.setTitle(QCoreApplication.translate("MainWindowDesign", u"FIFOs / Buffers", None))
         self.label_79.setText(QCoreApplication.translate("MainWindowDesign", u"Preview Buffer size total", None))
         self.label_63.setText(QCoreApplication.translate("MainWindowDesign", u"Preview buffer samples", None))
@@ -4860,13 +4870,13 @@ class Ui_MainWindowDesign(object):
         self.checkBox_showPreview.setText(QCoreApplication.translate("MainWindowDesign", u"Show Image", None))
         self.groupBox_16.setTitle(QCoreApplication.translate("MainWindowDesign", u"FPGA", None))
 #if QT_CONFIG(tooltip)
-        self.label_FPGA_status.setToolTip(QCoreApplication.translate("MainWindowDesign", u"Waiting for a Preview / Acquisition or the Keep FPGA On button.", None))
+        self.label_FPGA_status.setToolTip(QCoreApplication.translate("MainWindowDesign", u"Click Connect FPGA to open the FPGA session.", None))
 #endif // QT_CONFIG(tooltip)
         self.label_FPGA_status.setText("")
 #if QT_CONFIG(tooltip)
-        self.pushButton_fpga_connection_cmd.setToolTip(QCoreApplication.translate("MainWindowDesign", u"Keep the FPGA connected between acquisitions", None))
+        self.pushButton_fpga_connection_cmd.setToolTip(QCoreApplication.translate("MainWindowDesign", u"Load the FPGA firmware and keep it connected", None))
 #endif // QT_CONFIG(tooltip)
-        self.pushButton_fpga_connection_cmd.setText(QCoreApplication.translate("MainWindowDesign", u"Keep FPGA On", None))
+        self.pushButton_fpga_connection_cmd.setText(QCoreApplication.translate("MainWindowDesign", u"Connect FPGA", None))
         self.groupBox_18.setTitle("")
 #if QT_CONFIG(tooltip)
         self.pushButton_14.setToolTip(QCoreApplication.translate("MainWindowDesign", u"<html><head/><body><p>Add the current configuration to the Batch acquisition table</p></body></html>", None))

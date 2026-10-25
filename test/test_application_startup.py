@@ -33,17 +33,20 @@ def test_full_window_startup_and_plot_signals(tmp_path, log_directory_available)
             from brighteyes_mcs.ui import qt
 
             class StartupWindow(qt.MainWindow):
-                def __init__(self, args):
-                    super().__init__(args)
-                    QTimer.singleShot(1500, self.check_startup)
+                startup_connections = 0
 
                 def connectFPGA(self):
-                    raise AssertionError('Startup must not connect to hardware')
+                    self.startup_connections += 1
+                    self.mcs_manager.is_connected = True
+
+                def _connect_fpga_at_startup(self):
+                    super()._connect_fpga_at_startup()
+                    QTimer.singleShot(0, self.check_startup)
 
                 def check_startup(self):
                     assert self.init_ready and self.guiReadyFlag
                     assert not self._shutdown_started and not self._shutdown_complete
-                    assert not self.mcs_manager.is_connected
+                    assert self.startup_connections == 1
                     combo = self.ui.comboBox_plot_channel
                     combo.setCurrentIndex((combo.currentIndex() + 1) % combo.count())
                     self.im_widget_plot_item.setXRange(0, 2)
@@ -55,12 +58,17 @@ def test_full_window_startup_and_plot_signals(tmp_path, log_directory_available)
                         setattr(self.mcs_manager, 'is_connected', False))
                     self._fpgaWatchdogTick = Mock()
                     button = self.ui.pushButton_fpga_connection_cmd
-                    button.click()
-                    self.connectFPGA.assert_called_once_with()
                     assert self.mcs_manager.is_connected and button.isChecked()
                     button.click()
                     self.disconnectFPGA.assert_called_once_with()
                     assert not self.mcs_manager.is_connected and not button.isChecked()
+                    assert not self.ui.pushButton_acquisitionStart.isEnabled()
+                    button.click()
+                    self.connectFPGA.assert_called_once_with()
+                    assert self.mcs_manager.is_connected and button.isChecked()
+                    assert self.ui.pushButton_acquisitionStart.isEnabled()
+                    # No real session exists for shutdown to reset.
+                    self.mcs_manager.is_connected = False
                     logger.info('STARTUP_AND_PLOT_SIGNALS_OK')
                     import sys
                     print('STARTUP_AND_PLOT_SIGNALS_OK', file=sys.__stdout__, flush=True)

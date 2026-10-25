@@ -369,6 +369,27 @@ class TestMcsManager(unittest.TestCase):
 
         instance.data_process.stop.assert_called()
 
+    def test_stop_acquisition_keeps_fpga_session_open(self):
+        """Leave the FPGA session open when the acquisition workers stop."""
+        instance = McsManager()
+        instance.is_connected = True
+
+        instance.stop_acquisition()
+
+        self.assertTrue(instance.is_connected)
+
+    def test_stop_fpga_marks_session_closed_after_an_error(self):
+        """Mark the session closed even when closing the FPGA reports an error."""
+        instance = McsManager()
+        instance.is_connected = True
+        instance.fpga_handle = MagicMock()
+        instance.fpga_handle.stop.side_effect = RuntimeError("abort failed")
+
+        with self.assertRaises(RuntimeError):
+            instance.stop_fpga()
+
+        self.assertFalse(instance.is_connected)
+
     def test_stopPreview_stops_previewProcess(self):
         instance = McsManager()
         instance.preview_process = MagicMock()
