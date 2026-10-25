@@ -5877,14 +5877,6 @@ Have fun!
             self.lock_parameters_changed_call = True
             logger.debug("offset_um_update self.lock_parameters_changed_call SET True")
             self.lock_range_changing = True
-            calib_xx = self.ui.spinBox_calib_x.value()
-            calib_yy = self.ui.spinBox_calib_y.value()
-            calib_zz = self.ui.spinBox_calib_z.value()
-
-            offset_xx_um = self.ui.spinBox_off_x_um.value()
-            offset_yy_um = self.ui.spinBox_off_y_um.value()
-            offset_zz_um = self.ui.spinBox_off_z_um.value()
-
             self._update_offset_voltage_labels()
             logger.debug("%s %s", self.started_normal, self.started_preview)
             self.currentImage_pos = np.asarray(
@@ -5950,9 +5942,6 @@ Have fun!
             else:
                 circ_repetition = 1
                 circ_points = 1
-
-            clock_duration = time_bin * time_res * self.clock_base/2
-            Cx = time_res * self.clock_base
 
             numbers_xx = self.ui.spinBox_nx.value()
             numbers_yy = self.ui.spinBox_ny.value()

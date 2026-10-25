@@ -1722,51 +1722,6 @@
     "key": [
       "src/brighteyes_mcs/ui/qt/main_window.py",
       "F841",
-      "Local variable `Cx` is assigned to but never used",
-      "Cx = time_res * self.clock_base"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `calib_xx` is assigned to but never used",
-      "calib_xx = self.ui.spinBox_calib_x.value()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `calib_yy` is assigned to but never used",
-      "calib_yy = self.ui.spinBox_calib_y.value()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `calib_zz` is assigned to but never used",
-      "calib_zz = self.ui.spinBox_calib_z.value()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `clock_duration` is assigned to but never used",
-      "clock_duration = time_bin * time_res * self.clock_base/2"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
       "Local variable `fff` is assigned to but never used",
       "fff = a()"
     ],
@@ -1796,33 +1751,6 @@
       "F841",
       "Local variable `mouse_point` is assigned to but never used",
       "mouse_point = mouse_event.pos()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `offset_xx_um` is assigned to but never used",
-      "offset_xx_um = self.ui.spinBox_off_x_um.value()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `offset_yy_um` is assigned to but never used",
-      "offset_yy_um = self.ui.spinBox_off_y_um.value()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `offset_zz_um` is assigned to but never used",
-      "offset_zz_um = self.ui.spinBox_off_z_um.value()"
     ],
     "count": 1
   },
