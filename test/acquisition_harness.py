@@ -28,6 +28,27 @@ TRACE_BINS = 50
 TRACE_SAMPLES_PER_BIN = 4
 TIME_RESOLUTION = 1e-6
 
+X, Y, Z, REPETITIONS, TIMEBINS = 4, 3, 2, 2, 4
+SAMPLES = X * Y * Z * REPETITIONS * TIMEBINS
+
+
+def scan_counts() -> npt.NDArray[np.uint64]:
+    """Return the per-sample counts of 25 channels in acquisition order."""
+    index = np.arange(SAMPLES)
+    return np.stack([(index + channel) % 3 for channel in range(25)], axis=1).astype(np.uint64)
+
+
+def in_file_order(
+    counts: npt.NDArray[np.uint64], *, snake_walk_xy: bool = False, snake_walk_z: bool = False
+) -> npt.NDArray[np.uint64]:
+    """Arrange acquisition-order samples as (rep, z, y, x, bin, channel)."""
+    ordered = counts.reshape(REPETITIONS, Z, Y, X, TIMEBINS, -1).copy()
+    if snake_walk_xy:
+        ordered[:, :, 1::2] = ordered[:, :, 1::2, ::-1]
+    if snake_walk_z:
+        ordered[1::2] = ordered[1::2, ::-1]
+    return ordered
+
 
 @dataclass(frozen=True)
 class LoopRun:

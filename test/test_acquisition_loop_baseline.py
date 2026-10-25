@@ -1,42 +1,27 @@
 import h5py
 import numpy as np
-import numpy.typing as npt
 import pytest
 from brighteyes_mcs_cylibs.autocorrelator import Autocorrelator
 from brighteyes_mcs_cylibs.timeBinner import timeBinner
 
 from test.acquisition_harness import (
     AUTOCORRELATION_MAXX,
+    REPETITIONS,
+    SAMPLES,
     TIME_RESOLUTION,
+    TIMEBINS,
     TRACE_BINS,
     TRACE_SAMPLES_PER_BIN,
     RunAcquisitionLoop,
+    X,
+    Y,
+    Z,
+    in_file_order,
+    scan_counts,
 )
 from brighteyes_mcs.acquisition.detectors.pispad23.backend import (
     pispad23_pack_counts_to_spad25_words,
 )
-
-X, Y, Z, REPETITIONS, TIMEBINS = 4, 3, 2, 2, 4
-SAMPLES = X * Y * Z * REPETITIONS * TIMEBINS
-
-
-def scan_counts() -> npt.NDArray[np.uint64]:
-    """Return per-sample counts of 25 channels in acquisition order."""
-    index = np.arange(SAMPLES)
-    return np.stack([(index + channel) % 3 for channel in range(25)], axis=1).astype(np.uint64)
-
-
-def in_file_order(
-    counts: npt.NDArray[np.uint64], *, snake_walk_xy: bool = False, snake_walk_z: bool = False
-) -> npt.NDArray[np.uint64]:
-    """Arrange acquisition-order samples as (rep, z, y, x, bin, channel)."""
-    ordered = counts.reshape(REPETITIONS, Z, Y, X, TIMEBINS, -1).copy()
-    if snake_walk_xy:
-        ordered[:, :, 1::2] = ordered[:, :, 1::2, ::-1]
-    if snake_walk_z:
-        ordered[1::2] = ordered[1::2, ::-1]
-    return ordered
-
 
 def test_frames_reach_the_file_in_scan_order(run_acquisition_loop: RunAcquisitionLoop) -> None:
     """Write every frame of a raster scan to the file at its repetition and plane."""
