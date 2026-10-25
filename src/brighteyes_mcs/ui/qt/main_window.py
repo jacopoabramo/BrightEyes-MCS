@@ -82,6 +82,7 @@ from .console_widget import ConsoleWidget
 from .graphics_shutdown import disable_viewbox_item_change_callbacks
 from .system_profile_dialog import SystemProfileDialog
 from ...acquisition.manager import McsManager
+from ...acquisition.registers import ScanArea, Timing
 from ..table_manager import TableManager
 
 from .dict_to_tree import TreeModel
@@ -5665,38 +5666,13 @@ Have fun!
         """
 
         """
-        time_res = self.ui.spinBox_timeresolution.value()
-        time_bin = self.ui.spinBox_time_bin_per_px.value()
-
-        if self.ui.checkBox_circular.isChecked():
-            circ_repetition = self.ui.spinBox_circular_repetition.value()
-            circ_points = self.ui.spinBox_circular_points.value()
-        else:
-            circ_repetition = 1
-            circ_points = 1
-
-        clock_duration = time_bin * time_res * 20
-        Cx = time_res * self.clock_base
         logger.debug("temporalSettingsChanged")
-
-        waitForLaserInCycle = self.ui.spinBox_waitForLaser.value() * 40e6
-        waitAfterFrame = self.ui.spinBox_waitAfterFrame.value() * 40e6
-        waitOnlyFirstTime = self.ui.checkBox_waitOnlyFirstTime.isChecked()
-
-        logger.debug("temporalSettingsChanged")
-
-        self.setRegistersDict(
-            {
-                "time_bin_dwell_cycles": int(Cx),
-                "max_time_bins_per_pixel": int(time_bin),
-                "tag_clock_duration_cycles": int(clock_duration),
-                "wait_laser_startup_cycles": int(waitForLaserInCycle),
-                "wait_post_frame_cycles": int(waitAfterFrame),
-                "wait_laser_first_time_only_enable": waitOnlyFirstTime,
-                "max_circular_point": circ_points,
-                "max_circular_repetition": circ_repetition
-            }
-        )
+        timing = self._timing()
+        self.setRegistersDict(timing.registers())
+        time_res = timing.time_resolution_us
+        time_bin = timing.timebins_per_pixel
+        circ_points = timing.circular_points
+        circ_repetition = timing.circular_repetitions
 
         numbers_xx = self.ui.spinBox_nx.value()
         numbers_yy = self.ui.spinBox_ny.value()
@@ -5760,35 +5736,58 @@ Have fun!
         """
         self.positionSettingsChanged_apply()
 
-    def _offset_volts(self, add_offset_extra_V = False):
-        """Return the displayed X/Y/Z scan-centre offsets in volts."""
-        offset_extra_V  = (
-                    self.ui.spinBox_offExtra_x_V.value(),
-                    self.ui.spinBox_offExtra_y_V.value(),
-                    self.ui.spinBox_offExtra_z_V.value(),
-                    )
-               
-        offsets_um = (
-            self.ui.spinBox_off_x_um.value(),
-            self.ui.spinBox_off_y_um.value(),
-            self.ui.spinBox_off_z_um.value(),
-        )
-        calibrations = (
-            self.ui.spinBox_calib_x.value(),
-            self.ui.spinBox_calib_y.value(),
-            self.ui.spinBox_calib_z.value(),
+    def _scan_area(self):
+        """Return the scan area set in the position widgets."""
+        return ScanArea(
+            range_um=(
+                self.ui.spinBox_range_x.value(),
+                self.ui.spinBox_range_y.value(),
+                self.ui.spinBox_range_z.value(),
+            ),
+            offset_um=(
+                self.ui.spinBox_off_x_um.value(),
+                self.ui.spinBox_off_y_um.value(),
+                self.ui.spinBox_off_z_um.value(),
+            ),
+            calibration_um_per_volt=(
+                self.ui.spinBox_calib_x.value(),
+                self.ui.spinBox_calib_y.value(),
+                self.ui.spinBox_calib_z.value(),
+            ),
+            extra_offset_volts=(
+                self.ui.spinBox_offExtra_x_V.value(),
+                self.ui.spinBox_offExtra_y_V.value(),
+                self.ui.spinBox_offExtra_z_V.value(),
+            ),
+            pixels=self.ui.spinBox_nx.value(),
+            lines=self.ui.spinBox_ny.value(),
+            frames=self.ui.spinBox_nframe.value(),
+            repetitions=self.ui.spinBox_nrepetition.value(),
         )
 
-        if add_offset_extra_V:
-            return tuple(
-                offset / calibration + extra_offset
-                for offset, calibration, extra_offset in zip(offsets_um, calibrations, offset_extra_V)
-            )
-        else:
-            return tuple(
-                offset / calibration
-                for offset, calibration in zip(offsets_um, calibrations)
-            )
+    def _timing(self):
+        """Return the timing set in the temporal widgets.
+
+        The circular point and repetition counts are 1 while the circular scan
+        is off.
+        """
+        circular = self.ui.checkBox_circular.isChecked()
+        return Timing(
+            time_resolution_us=self.ui.spinBox_timeresolution.value(),
+            timebins_per_pixel=self.ui.spinBox_time_bin_per_px.value(),
+            wait_for_laser_s=self.ui.spinBox_waitForLaser.value(),
+            wait_after_frame_s=self.ui.spinBox_waitAfterFrame.value(),
+            wait_first_time_only=self.ui.checkBox_waitOnlyFirstTime.isChecked(),
+            circular_points=self.ui.spinBox_circular_points.value() if circular else 1,
+            circular_repetitions=(
+                self.ui.spinBox_circular_repetition.value() if circular else 1
+            ),
+            clock_base_mhz=self.clock_base,
+        )
+
+    def _offset_volts(self, add_offset_extra_V = False):
+        """Return the displayed X/Y/Z scan-centre offsets in volts."""
+        return self._scan_area().centre_volts(add_offset_extra_V)
 
     def _update_offset_voltage_labels(self):
         """Refresh the derived X/Y/Z voltage labels and return their values."""
@@ -5893,47 +5892,7 @@ Have fun!
         self.current_number_px_y = self.ui.spinBox_ny.value()
         self.current_number_px_z = self.ui.spinBox_nframe.value()
 
-        xx = self.ui.spinBox_range_x.value()
-        yy = self.ui.spinBox_range_y.value()
-        zz = self.ui.spinBox_range_z.value()
-
-        calib_xx = self.ui.spinBox_calib_x.value()
-        calib_yy = self.ui.spinBox_calib_y.value()
-        calib_zz = self.ui.spinBox_calib_z.value()
-
-        offset_xx_um = self.ui.spinBox_off_x_um.value()
-        offset_yy_um = self.ui.spinBox_off_y_um.value()
-        offset_zz_um = self.ui.spinBox_off_z_um.value()
-
-        offset_xx, offset_yy, offset_zz = self._update_offset_voltage_labels()
-
-        numbers_xx = self.ui.spinBox_nx.value()
-        numbers_yy = self.ui.spinBox_ny.value()
-        numbers_ff = self.ui.spinBox_nframe.value()
-        numbers_repetition = self.ui.spinBox_nrepetition.value()
-
-        calibration_v_step = (
-                np.asarray([xx, yy, zz])
-                / np.asarray([calib_xx, calib_yy, calib_zz])
-                / np.asarray([numbers_xx, numbers_yy, numbers_ff])
-        )
-
-        offExtra_x_V = self.ui.spinBox_offExtra_x_V.value()
-        offExtra_y_V = self.ui.spinBox_offExtra_y_V.value()
-        offExtra_z_V = self.ui.spinBox_offExtra_z_V.value()
-
-        laserEnable0 = self.ui.checkBox_laser0.isChecked()
-        laserEnable1 = self.ui.checkBox_laser1.isChecked()
-        laserEnable2 = self.ui.checkBox_laser2.isChecked()
-        laserEnable3 = self.ui.checkBox_laser3.isChecked()
-
-        start_offset = np.asarray(
-            [
-                offset_xx - (0.5 * xx / calib_xx) + offExtra_x_V,
-                offset_yy - (0.5 * yy / calib_yy) + offExtra_y_V,
-                offset_zz - (0.5 * zz / calib_zz) + offExtra_z_V,
-            ]
-        )
+        self._update_offset_voltage_labels()
 
         #
 
@@ -6146,55 +6105,10 @@ Have fun!
         """
         if not self.lock_parameters_changed_call or force:
             logger.debug("positionSettingsChanged_apply")
-            xx = self.ui.spinBox_range_x.value()
             if self.ui.checkBoxLockRatio.isChecked():
                 self.ui.spinBox_range_y.setValue(self.ui.spinBox_range_x.value())
-            yy = self.ui.spinBox_range_y.value()
-            zz = self.ui.spinBox_range_z.value()
-
-            calib_xx = self.ui.spinBox_calib_x.value()
-            calib_yy = self.ui.spinBox_calib_y.value()
-            calib_zz = self.ui.spinBox_calib_z.value()
-
-            offset_xx_um = self.ui.spinBox_off_x_um.value()
-            offset_yy_um = self.ui.spinBox_off_y_um.value()
-            offset_zz_um = self.ui.spinBox_off_z_um.value()
-
-            offset_xx, offset_yy, offset_zz = self._update_offset_voltage_labels()
-
-            numbers_xx = self.ui.spinBox_nx.value()
-            numbers_yy = self.ui.spinBox_ny.value()
-            numbers_ff = self.ui.spinBox_nframe.value()
-            numbers_repetition = self.ui.spinBox_nrepetition.value()
-
-            calibration_v_step = (
-                    np.asarray([xx, yy, zz])
-                    / np.asarray([calib_xx, calib_yy, calib_zz])
-                    / np.asarray([numbers_xx, numbers_yy, numbers_ff])
-            )
-
-            offExtra_x_V = self.ui.spinBox_offExtra_x_V.value()
-            offExtra_y_V = self.ui.spinBox_offExtra_y_V.value()
-            offExtra_z_V = self.ui.spinBox_offExtra_z_V.value()
-
-            start_offset = np.asarray(
-                [
-                    offset_xx - (0.5 * xx / calib_xx) + offExtra_x_V,
-                    offset_yy - (0.5 * yy / calib_yy) + offExtra_y_V,
-                    offset_zz - (0.5 * zz / calib_zz) + offExtra_z_V,
-                ]
-            )
-
-            self.setRegistersDict(
-                {
-                    "axis_calibration_volts_per_step": calibration_v_step,
-                    "axis_start_offset_volts": start_offset,
-                    "max_pixel": numbers_xx,
-                    "max_line": numbers_yy,
-                    "max_frame": numbers_ff,
-                    "max_repetition": numbers_repetition + 1,
-                }
-            )
+            self._update_offset_voltage_labels()
+            self.setRegistersDict(self._scan_area().registers())
 
             # self.rect_roi_modified_lock = True
 
@@ -6771,25 +6685,6 @@ Have fun!
             )
         )
 
-        time_res = self.ui.spinBox_timeresolution.value()
-        time_bin = self.ui.spinBox_time_bin_per_px.value()
-
-        if self.ui.checkBox_circular.isChecked():
-            circ_repetition = self.ui.spinBox_circular_repetition.value()
-            circ_points = self.ui.spinBox_circular_points.value()
-        else:
-            circ_repetition = 1
-            circ_points = 1
-
-        clock_duration = time_bin * time_res * self.clock_base/2
-        Cx = time_res * self.clock_base
-
-        waitForLaserInCycle = self.ui.spinBox_waitForLaser.value() * 40e6
-        waitAfterFrame = self.ui.spinBox_waitAfterFrame.value() * 40e6
-        waitOnlyFirstTime = self.ui.checkBox_waitOnlyFirstTime.isChecked()
-
-        logger.debug("temporalSettingsChanged")
-
         circular_motion = self.ui.checkBox_circular.isChecked()
         dummy_data = self.ui.checkBox_DummyData.isChecked()
 
@@ -6828,14 +6723,6 @@ Have fun!
         vr0 = self.ui.checkBox_SPAD_VR0.isChecked()
         vr1 = self.ui.checkBox_SPAD_VR0.isChecked()
 
-        xx = self.ui.spinBox_range_x.value()
-        yy = self.ui.spinBox_range_y.value()
-        zz = self.ui.spinBox_range_z.value()
-
-        calib_xx = self.ui.spinBox_calib_x.value()
-        calib_yy = self.ui.spinBox_calib_y.value()
-        calib_zz = self.ui.spinBox_calib_z.value()
-
         if self.spad_channels == 49:
             self.setRegistersDict(
                 {
@@ -6849,26 +6736,7 @@ Have fun!
                 }
             )
 
-        offset_xx_um = self.ui.spinBox_off_x_um.value()
-        offset_yy_um = self.ui.spinBox_off_y_um.value()
-        offset_zz_um = self.ui.spinBox_off_z_um.value()
-
-        offset_xx, offset_yy, offset_zz = self._update_offset_voltage_labels()
-
-        numbers_xx = self.ui.spinBox_nx.value()
-        numbers_yy = self.ui.spinBox_ny.value()
-        numbers_ff = self.ui.spinBox_nframe.value()
-        numbers_repetition = self.ui.spinBox_nrepetition.value()
-
-        calibration_v_step = (
-                np.asarray([xx, yy, zz])
-                / np.asarray([calib_xx, calib_yy, calib_zz])
-                / np.asarray([numbers_xx, numbers_yy, numbers_ff])
-        )
-
-        offExtra_x_V = self.ui.spinBox_offExtra_x_V.value()
-        offExtra_y_V = self.ui.spinBox_offExtra_y_V.value()
-        offExtra_z_V = self.ui.spinBox_offExtra_z_V.value()
+        self._update_offset_voltage_labels()
 
         laserEnable0 = self.ui.checkBox_laser0.isChecked()
         laserEnable1 = self.ui.checkBox_laser1.isChecked()
@@ -6882,26 +6750,11 @@ Have fun!
             self.ui.spinBox_compensation_delay.value()
         )
 
-        start_offset = np.asarray(
-            [
-                offset_xx - (0.5 * xx / calib_xx) + offExtra_x_V,
-                offset_yy - (0.5 * yy / calib_yy) + offExtra_y_V,
-                offset_zz - (0.5 * zz / calib_zz) + offExtra_z_V,
-            ]
-        )
-
         laser_debug = self.ui.checkBox_DFD_LaserDebug.isChecked()
 
         self.setRegistersDict(
             {
-                "time_bin_dwell_cycles": int(Cx),
-                "max_time_bins_per_pixel": int(time_bin),
-                "tag_clock_duration_cycles": int(clock_duration),
-                "wait_laser_startup_cycles": int(waitForLaserInCycle),
-                "wait_post_frame_cycles": int(waitAfterFrame),
-                "wait_laser_first_time_only_enable": waitOnlyFirstTime,
-                "max_circular_point": circ_points,
-                "max_circular_repetition": circ_repetition,
+                **self._timing().registers(),
                 "circular_scan_enable": circular_motion,
                 "dummy_data_enable": dummy_data,
                 "laser_excitation_sequence": laser_sequence,
@@ -6913,12 +6766,7 @@ Have fun!
                 "z_snake_scan_enable": self.snake_walk_Activate_Z,
                 "dfd_laser_sync_debug_enable": laser_debug,
                 # "AD5764_MaxBit": 1,
-                "axis_calibration_volts_per_step": calibration_v_step,
-                "axis_start_offset_volts": start_offset,
-                "max_pixel": numbers_xx,
-                "max_line": numbers_yy,
-                "max_frame": numbers_ff,
-                "max_repetition": numbers_repetition + 1,
+                **self._scan_area().registers(),
                 "laser_1_enable": laserEnable0,
                 "laser_2_enable": laserEnable1,
                 "laser_3_enable": laserEnable2,
