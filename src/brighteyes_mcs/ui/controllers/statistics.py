@@ -21,8 +21,15 @@ def scan_duration_seconds(
 ) -> float:
     """Return configured scan time; omit frames/repetitions for a single frame."""
     return (
-        time_resolution_us * time_bins * circular_points * circular_repetitions
-        * pixels_x * pixels_y * frames * repetitions * 1e-6
+        time_resolution_us
+        * time_bins
+        * circular_points
+        * circular_repetitions
+        * pixels_x
+        * pixels_y
+        * frames
+        * repetitions
+        * 1e-6
     )
 
 

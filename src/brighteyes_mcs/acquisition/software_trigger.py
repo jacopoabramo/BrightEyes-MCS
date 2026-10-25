@@ -23,7 +23,9 @@ class SoftwareTriggerSession:
         self.timestamps = []
         self.preview_geometry = {
             "axis_start_offset_volts": list(self.requested["axis_start_offset_volts"]),
-            "axis_calibration_volts_per_step": list(self.requested["axis_calibration_volts_per_step"]),
+            "axis_calibration_volts_per_step": list(
+                self.requested["axis_calibration_volts_per_step"]
+            ),
         }
         self.error = ""
         self.deadline = None
@@ -36,12 +38,18 @@ class SoftwareTriggerSession:
 
     def prepare(self):
         # max_repetition includes the firmware's terminal repetition.
-        registers = {"max_frame": 1, "max_repetition": 2,
-                     "slave_mode_enable": False, "start_command": False,
-                     "stop_command": False, "z_snake_scan_enable": False}
+        registers = {
+            "max_frame": 1,
+            "max_repetition": 2,
+            "slave_mode_enable": False,
+            "start_command": False,
+            "stop_command": False,
+            "z_snake_scan_enable": False,
+        }
         if self.laser_off:
-            registers.update(laser_off_after_measurement_enable=True,
-                             wait_laser_first_time_only_enable=False)
+            registers.update(
+                laser_off_after_measurement_enable=True, wait_laser_first_time_only_enable=False
+            )
         self.manager.set_registers_dict(registers)
         if self.laser_off:
             self.lasers_off()
@@ -56,8 +64,10 @@ class SoftwareTriggerSession:
             return
         if not self.manager.shared_dict.get("software_trigger_worker_ready", False):
             return
-        if (not self.needs_receiver_ready or
-                self.manager.shared_dict.get("software_trigger_receiver_ready", 0) > self.issued):
+        if (
+            not self.needs_receiver_ready
+            or self.manager.shared_dict.get("software_trigger_receiver_ready", 0) > self.issued
+        ):
             self.state = "armed"
 
     def frame_offsets(self):
@@ -101,8 +111,13 @@ class SoftwareTriggerSession:
             self.manager.set_registers_dict({"axis_start_offset_volts": offsets})
             if self.laser_off:
                 self.manager.set_registers_dict(self.lasers)
-                self.manager.set_registers_dict({"laser_force_pulsing_enable": bool(
-                    self.requested.get("laser_force_pulsing_enable", False))})
+                self.manager.set_registers_dict(
+                    {
+                        "laser_force_pulsing_enable": bool(
+                            self.requested.get("laser_force_pulsing_enable", False)
+                        )
+                    }
+                )
             self.manager.set_registers_dict({"stop_command": False, "start_command": False})
             self.manager.set_registers_dict({"start_command": True})
             self.manager.set_registers_dict({"start_command": False})
@@ -110,11 +125,18 @@ class SoftwareTriggerSession:
             self.timestamps.append(time.time())
             self.started_at = time.monotonic()
             r = self.requested
-            samples = (r["max_pixel"] * r["max_line"] * r["max_time_bins_per_pixel"]
-                       * r["max_circular_point"] * r["max_circular_repetition"])
-            duration = (samples * r["time_bin_dwell_cycles"]
-                        + r.get("wait_laser_startup_cycles", 0)
-                        + r.get("wait_post_frame_cycles", 0)) / (self.manager.clock_base * 1e6)
+            samples = (
+                r["max_pixel"]
+                * r["max_line"]
+                * r["max_time_bins_per_pixel"]
+                * r["max_circular_point"]
+                * r["max_circular_repetition"]
+            )
+            duration = (
+                samples * r["time_bin_dwell_cycles"]
+                + r.get("wait_laser_startup_cycles", 0)
+                + r.get("wait_post_frame_cycles", 0)
+            ) / (self.manager.clock_base * 1e6)
             # The wait for a human trigger has no timeout. Only an issued frame does.
             self.deadline = self.started_at + max(30.0, duration * 3 + 10)
             return True
@@ -127,8 +149,10 @@ class SoftwareTriggerSession:
         counts = []
         for fifo in self.manager.activated_fifos_list:
             if self.manager.raw_stream_mode:
-                counts.append(self.manager.loc_acquired[fifo].value //
-                              self.manager.get_expected_fifo_elements_per_frame(fifo))
+                counts.append(
+                    self.manager.loc_acquired[fifo].value
+                    // self.manager.get_expected_fifo_elements_per_frame(fifo)
+                )
             else:
                 counts.append(self.manager.shared_dict.get(f"software_trigger_frames_{fifo}", 0))
         return min(counts, default=0)
@@ -163,17 +187,25 @@ class SoftwareTriggerSession:
     def metadata(self):
         completed = min(self.issued, self.received_frames())
         return {
-            "enabled": True, "frames_requested": self.total or 0,
-            "frames_triggered": self.issued, "frames_completed": completed,
+            "enabled": True,
+            "frames_requested": self.total or 0,
+            "frames_triggered": self.issued,
+            "frames_completed": completed,
             "complete": self.total == completed and not self.error,
             "laser_off_between_frames": self.laser_off,
-            "trigger_timestamps_unix": self.timestamps, "error": self.error,
+            "trigger_timestamps_unix": self.timestamps,
+            "error": self.error,
         }
 
     def restore(self):
         # Restore only controls overridden by this mode, never an old command edge.
-        names = ("max_frame", "max_repetition", "slave_mode_enable", "z_snake_scan_enable",
-                 "axis_start_offset_volts")
+        names = (
+            "max_frame",
+            "max_repetition",
+            "slave_mode_enable",
+            "z_snake_scan_enable",
+            "axis_start_offset_volts",
+        )
         if self.laser_off:
             names += ("laser_off_after_measurement_enable", "wait_laser_first_time_only_enable")
         registers = {name: self.requested.get(name, False) for name in names}

@@ -27,19 +27,25 @@ class TtmRemoteManager(object):
         self.parameter.external_app = None
 
         self.parameter.host = ip  # Standard loopback interface address (localhost)
-        self.parameter.port = port  # with 0 the OS give a free non-privileged port (non-privileged ports are > 1023)
+        self.parameter.port = (
+            port  # with 0 the OS give a free non-privileged port (non-privileged ports are > 1023)
+        )
 
         self.local_executable = local_executable
 
         if self.local_executable == "":  # data receiver (remote)
             self.parameter.external_app = None
         else:  # data receiver (local)
-            logger.debug("%s %s", "popen", [
-                        self.local_executable,
-                        "tcp",
-                        self.parameter.host,
-                        str(self.parameter.port),
-                    ])
+            logger.debug(
+                "%s %s",
+                "popen",
+                [
+                    self.local_executable,
+                    "tcp",
+                    self.parameter.host,
+                    str(self.parameter.port),
+                ],
+            )
             self.parameter.external_app = subprocess.Popen(
                 [
                     self.local_executable,
@@ -183,4 +189,3 @@ class TtmRemoteManager(object):
             ),
         )
         self.parameter.thread_wait_end_of_file_thread.start()
-

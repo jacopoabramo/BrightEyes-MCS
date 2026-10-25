@@ -20,11 +20,22 @@ class PISPAD23AcquisitionLoopProcess(BaseAcquisitionLoopProcess):
         """Convert native PISPAD23 packets to normalized 25-channel FIFO words."""
 
         if isinstance(payload, PISPAD23RawBunch):
-            logger.debug("%s %s %s %s", self.process_label, "decoded PISPAD23 raw bunch", payload.sample_count, payload.payload.get("source"))
+            logger.debug(
+                "%s %s %s %s",
+                self.process_label,
+                "decoded PISPAD23 raw bunch",
+                payload.sample_count,
+                payload.payload.get("source"),
+            )
             return self._decode_raw_bunch(payload)
 
         if hasattr(payload, "payload") and hasattr(payload, "sample_count"):
-            logger.debug("%s %s %s", self.process_label, "decoded PISPAD23-compatible raw bunch", payload.sample_count)
+            logger.debug(
+                "%s %s %s",
+                self.process_label,
+                "decoded PISPAD23-compatible raw bunch",
+                payload.sample_count,
+            )
             return self._decode_raw_bunch(payload)
 
         return np.asarray(payload, dtype=np.uint64)

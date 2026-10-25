@@ -7,8 +7,18 @@ from .h5_schema import DATA_FORMAT_VERSION
 
 
 class MicroimageH5Writer:
-    def __init__(self, filename, width, height, frames, repetitions, dwell_seconds,
-                 *, snake=False, snake_z=False):
+    def __init__(
+        self,
+        filename,
+        width,
+        height,
+        frames,
+        repetitions,
+        dwell_seconds,
+        *,
+        snake=False,
+        snake_z=False,
+    ):
         if min(width, height, frames, repetitions) < 1 or dwell_seconds <= 0:
             raise ValueError("Invalid PISPAD23 HDF5 acquisition dimensions or dwell duration")
         self.width, self.height = width, height
@@ -23,23 +33,43 @@ class MicroimageH5Writer:
         try:
             self.file.attrs.update(default="data", data_format_version=DATA_FORMAT_VERSION)
             self.data = self.file.create_dataset(
-                "data", (repetitions, frames, height, width, 1, 25), dtype="uint32",
-                chunks=(1, 1, min(height, 32), min(width, 32), 1, 25), fillvalue=0,
+                "data",
+                (repetitions, frames, height, width, 1, 25),
+                dtype="uint32",
+                chunks=(1, 1, min(height, 32), min(width, 32), 1, 25),
+                fillvalue=0,
             )
-            self.data.attrs.update(axes="repetition,z,y,x,timebin,channel", units="photon counts",
-                                   timebins_per_pixel=1, dwell_seconds=dwell_seconds,
-                                   integration="one complete dwell per time bin")
+            self.data.attrs.update(
+                axes="repetition,z,y,x,timebin,channel",
+                units="photon counts",
+                timebins_per_pixel=1,
+                dwell_seconds=dwell_seconds,
+                integration="one complete dwell per time bin",
+            )
             self.info = self.file.create_group("pispad23_microimages")
-            self.info.attrs.update(complete=False, stop_reason="recording", saved_dwells=0,
-                                   dwell_seconds=dwell_seconds, expected_frames=frames * repetitions,
-                                   detector_channels=25, snake_walk_xy=snake, snake_walk_z=snake_z)
+            self.info.attrs.update(
+                complete=False,
+                stop_reason="recording",
+                saved_dwells=0,
+                dwell_seconds=dwell_seconds,
+                expected_frames=frames * repetitions,
+                detector_channels=25,
+                snake_walk_xy=snake,
+                snake_walk_z=snake_z,
+            )
             shape = (repetitions, frames, height, width)
             chunks = (1, 1, min(height, 64), min(width, 64))
             self.valid = self.info.create_dataset("valid", shape, dtype="bool", chunks=chunks)
-            self.pixel_flags = self.info.create_dataset("flags", shape, dtype="uint8", chunks=chunks)
+            self.pixel_flags = self.info.create_dataset(
+                "flags", shape, dtype="uint8", chunks=chunks
+            )
             self.pixel_flags.attrs["meaning"] = "bit 0 complete dwell; bit 1 valid; bit 2 saturated"
-            self.frame_complete = self.info.create_dataset("frame_complete", shape[:2], dtype="bool")
-            self.frame_id = self.info.create_dataset("frame_id", shape[:2], dtype="int64", fillvalue=-1)
+            self.frame_complete = self.info.create_dataset(
+                "frame_complete", shape[:2], dtype="bool"
+            )
+            self.frame_id = self.info.create_dataset(
+                "frame_id", shape[:2], dtype="int64", fillvalue=-1
+            )
         except Exception:
             self.file.close()
             raise
@@ -86,10 +116,23 @@ class MicroimageH5Writer:
     def close(self, *, finished=False, error=""):
         try:
             self._flush_frame()
-            complete = finished and not error and self.complete_frames == self.frames * self.repetitions
-            self.info.attrs.update(complete=complete, saved_dwells=self.saved_dwells,
-                                   stop_reason=("error" if error else "complete" if complete else
-                                                "incomplete" if finished else "stopped"), error=error)
+            complete = (
+                finished and not error and self.complete_frames == self.frames * self.repetitions
+            )
+            self.info.attrs.update(
+                complete=complete,
+                saved_dwells=self.saved_dwells,
+                stop_reason=(
+                    "error"
+                    if error
+                    else "complete"
+                    if complete
+                    else "incomplete"
+                    if finished
+                    else "stopped"
+                ),
+                error=error,
+            )
             return complete
         finally:
             self.file.close()

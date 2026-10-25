@@ -68,10 +68,7 @@ def _safe_members(archive: ZipFile) -> list[tuple[ZipInfo, tuple[str, ...]]]:
 
     first_parts = {parts[0] for _, parts in members}
     strip_root = len(first_parts) == 1 and all(len(parts) > 1 for _, parts in members)
-    return [
-        (member, parts[1:] if strip_root else parts)
-        for member, parts in members
-    ]
+    return [(member, parts[1:] if strip_root else parts) for member, parts in members]
 
 
 def extract_firmware_archive(
@@ -95,9 +92,7 @@ def extract_firmware_archive(
             try:
                 target.resolve().relative_to(root_resolved)
             except ValueError as error:
-                raise FirmwareArchiveError(
-                    f"Unsafe archive member: {member.filename}"
-                ) from error
+                raise FirmwareArchiveError(f"Unsafe archive member: {member.filename}") from error
             targets.append((member, target))
 
         for member, target in targets:

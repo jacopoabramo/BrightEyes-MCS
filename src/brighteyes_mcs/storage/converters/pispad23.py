@@ -3,7 +3,9 @@
 from pathlib import Path
 
 
-def convert_pispad23_raw_acquisition(metadata_filename, output_filename=None, progress_callback=None):
+def convert_pispad23_raw_acquisition(
+    metadata_filename, output_filename=None, progress_callback=None
+):
     """
     Placeholder for PISPAD23 raw-bunch conversion.
 
@@ -17,4 +19,3 @@ def convert_pispad23_raw_acquisition(metadata_filename, output_filename=None, pr
         "PISPAD23 raw conversion is scaffolded but not implemented yet. "
         "PISPAD23 raw files are not SPAD FIFO raw streams."
     )
-

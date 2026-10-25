@@ -10,11 +10,7 @@ from pyqtgraph import exporters
 import json
 import numpy as np
 
-from PySide6.QtCore import (
-    Signal,
-    QIODevice,
-    QBuffer,
-    QObject)
+from PySide6.QtCore import Signal, QIODevice, QBuffer, QObject
 from ..application.gui_gateway import GuiApplicationGateway
 
 
@@ -22,6 +18,7 @@ class NumpyEncoder(json.JSONEncoder):
     """
     Custom JSON encoder for NumPy arrays
     """
+
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
@@ -32,6 +29,7 @@ class FastAPIServerThread(threading.Thread):
     """
     Thread class for running the FastAPI server
     """
+
     def __init__(self, main_window, host="127.0.0.1", port=8000):
         """
         Constructor for the FastAPIServerThread class that initializes the FastAPI app and the server configuration parameters (host and port)
@@ -71,9 +69,7 @@ class FastAPIServerThread(threading.Thread):
                 "resulting_program_state": "idle or acquisition_done",
             },
         }
-        supported_commands_description = ", ".join(
-            "`%s`" % command for command in command_catalog
-        )
+        supported_commands_description = ", ".join("`%s`" % command for command in command_catalog)
         full_status_example = {
             "program_state": "idle",
             "allowed_program_states": [
@@ -104,6 +100,7 @@ class FastAPIServerThread(threading.Thread):
             """
             Custom signal class for emitting signals to the main window
             """
+
             start = Signal()
             stop = Signal()
             preview = Signal()
@@ -124,17 +121,11 @@ class FastAPIServerThread(threading.Thread):
             "/state/",
             tags=["Status"],
             summary="Get the current program state",
-            description=(
-                "Return only the current BrightEyes-MCS program state."
-            ),
+            description=("Return only the current BrightEyes-MCS program state."),
             responses={
                 200: {
                     "description": "Current application state payload.",
-                    "content": {
-                        "application/json": {
-                            "example": {"program_state": "idle"}
-                        }
-                    },
+                    "content": {"application/json": {"example": {"program_state": "idle"}}},
                 },
             },
         )
@@ -156,11 +147,7 @@ class FastAPIServerThread(threading.Thread):
             responses={
                 200: {
                     "description": "Current full application status payload.",
-                    "content": {
-                        "application/json": {
-                            "example": full_status_example
-                        }
-                    },
+                    "content": {"application/json": {"example": full_status_example}},
                 },
             },
         )
@@ -188,7 +175,7 @@ class FastAPIServerThread(threading.Thread):
             """
             mydict = self.gateway.configuration()
 
-            if item == 'all':
+            if item == "all":
                 return json.dumps(mydict, cls=NumpyEncoder)
             else:
                 return json.dumps(mydict[item], cls=NumpyEncoder)
@@ -252,11 +239,7 @@ class FastAPIServerThread(threading.Thread):
             responses={
                 200: {
                     "description": "Command accepted by the GUI dispatcher.",
-                    "content": {
-                        "application/json": {
-                            "example": "Done"
-                        }
-                    },
+                    "content": {"application/json": {"example": "Done"}},
                 },
                 400: {
                     "description": "Unsupported command name.",
@@ -267,13 +250,13 @@ class FastAPIServerThread(threading.Thread):
             item: str = Path(
                 ...,
                 description="Supported values: %s." % supported_commands_description,
-            )
+            ),
         ):
             """
-             route that receives a command and emits a signal to the main window based on the command
-             preview: emits the preview signal
-             acquisition: emits the start signal
-             stop: emits the stop signal
+            route that receives a command and emits a signal to the main window based on the command
+            preview: emits the preview signal
+            acquisition: emits the start signal
+            stop: emits the stop signal
             """
             if item not in command_catalog:
                 raise HTTPException(
@@ -307,8 +290,8 @@ class FastAPIServerThread(threading.Thread):
                 mydict_processed = {}
                 for i in mydict.keys():
                     d = mydict[i]
-                    if d != '':
-                        mydict_processed.update({i:d})
+                    if d != "":
+                        mydict_processed.update({i: d})
                     print(mydict)
                 if len(mydict_processed.keys()) > 0:
                     print(mydict_processed)
@@ -321,7 +304,9 @@ class FastAPIServerThread(threading.Thread):
                 raise HTTPException(status_code=400, detail=str(e))
 
         @self.app.post("/array/")
-        async def receive_array(file: UploadFile = File(...), shape: str = "", dtype: str = "float64"):
+        async def receive_array(
+            file: UploadFile = File(...), shape: str = "", dtype: str = "float64"
+        ):
             """
             DUMMY FOR TESTING PURPOSES
             route that receives a NumPy array as a binary file and converts it to a NumPy array
@@ -334,7 +319,7 @@ class FastAPIServerThread(threading.Thread):
                 print(f"Received data length: {len(data)} bytes")
 
                 # Convert the shape from string to tuple
-                shape_tuple = tuple(map(int, shape.split(',')))
+                shape_tuple = tuple(map(int, shape.split(",")))
 
                 # Log the received shape and dtype
                 print(f"Received shape: {shape_tuple}, dtype: {dtype}")
@@ -378,7 +363,6 @@ class FastAPIServerThread(threading.Thread):
             route that returns the fingerprint image as a PNG image
             """
             try:
-
                 exporter = exporters.ImageExporter(self.gateway.fingerprint_image_item())
 
                 # Save the image to a buffer
@@ -405,14 +389,13 @@ class FastAPIServerThread(threading.Thread):
 
                 # Convert the array to bytes
                 array_bytes = np_array.tobytes()
-                shape_str = ','.join(map(str, np_array.shape))
+                shape_str = ",".join(map(str, np_array.shape))
                 dtype_str = str(np_array.dtype)
-                headers = {
-                    "X-Shape": shape_str,
-                    "X-Dtype": dtype_str
-                }
+                headers = {"X-Shape": shape_str, "X-Dtype": dtype_str}
                 buffer = io.BytesIO(array_bytes)
-                return StreamingResponse(buffer, media_type="application/octet-stream", headers=headers)
+                return StreamingResponse(
+                    buffer, media_type="application/octet-stream", headers=headers
+                )
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
@@ -426,24 +409,23 @@ class FastAPIServerThread(threading.Thread):
                 np_array = self.gateway.fingerprint_array()
                 # Convert the array to bytes
                 array_bytes = np_array.tobytes()
-                shape_str = ','.join(map(str, np_array.shape))
+                shape_str = ",".join(map(str, np_array.shape))
                 dtype_str = str(np_array.dtype)
-                headers = {
-                    "X-Shape": shape_str,
-                    "X-Dtype": dtype_str
-                }
+                headers = {"X-Shape": shape_str, "X-Dtype": dtype_str}
                 buffer = io.BytesIO(array_bytes)
-                return StreamingResponse(buffer, media_type="application/octet-stream", headers=headers)
+                return StreamingResponse(
+                    buffer, media_type="application/octet-stream", headers=headers
+                )
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
-
-
 
     def run(self):
         """
         Method to run the FastAPI server
         """
-        uvicorn_config = uvicorn.Config(app=self.app, host=self.host, port=self.port, log_level="info")
+        uvicorn_config = uvicorn.Config(
+            app=self.app, host=self.host, port=self.port, log_level="info"
+        )
         self.server = uvicorn.Server(config=uvicorn_config)
         self.server.run()
 

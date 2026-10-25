@@ -12,7 +12,6 @@ from ..storage.h5_schema import DATA_FORMAT_VERSION
 from ..storage.legacy_names import translate_metadata_names
 
 
-
 try:
     import pyqtgraph as pg
 except:
@@ -100,11 +99,11 @@ class H5Manager:
         else:
             group_conf = self.h5file[group_name]
 
-        meta_data_h5_debug=""
+        meta_data_h5_debug = ""
         for i in mydict.keys():
             value_i = mydict[i]
             if value_i is not None:
-                meta_data_h5_debug+="%s (%s): %s     "  %(i, type(value_i), value_i)
+                meta_data_h5_debug += "%s (%s): %s     " % (i, type(value_i), value_i)
                 if isinstance(value_i, list):
                     fff = np.asarray(mydict[i], dtype=np.float64)
                     logger.debug("%s %s", fff, type(fff))
@@ -116,6 +115,7 @@ class H5Manager:
                 else:
                     group_conf.attrs[i] = mydict[i]
         logger.debug("%s %s", "Metadata h5 added at %s: " % group_name, meta_data_h5_debug)
+
     def metadata_add_initial(self, comment):
         logger.debug("metadata_add_initial")
         self.h5file.attrs["default"] = "data"
@@ -318,4 +318,3 @@ class H5ManagerProcessClient:
 
     def shutdown(self):
         self._send("shutdown", wait=True)
-

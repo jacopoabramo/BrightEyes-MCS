@@ -13,7 +13,7 @@
       "src/brighteyes_mcs/acquisition/manager.py",
       "E711",
       "Comparison to `None` should be `cond is None`",
-      "if fifo_name==None:"
+      "if fifo_name == None:"
     ],
     "count": 3
   },
@@ -92,65 +92,11 @@
   {
     "key": [
       "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E701",
-      "Multiple statements on one line (colon)",
-      "if VIZTRACER_ON: from viztracer import VizTracer"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E701",
-      "Multiple statements on one line (colon)",
-      "if VIZTRACER_ON: self.tracer = VizTracer(log_func_with_objprint=True)"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E701",
-      "Multiple statements on one line (colon)",
-      "if VIZTRACER_ON: self.tracer.save()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E701",
-      "Multiple statements on one line (colon)",
-      "if VIZTRACER_ON: self.tracer.start()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E701",
-      "Multiple statements on one line (colon)",
-      "if VIZTRACER_ON: self.tracer.stop()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
-      "E712",
-      "Avoid equality comparisons to `True`; use `self.activate_show_preview:` for truth checks",
-      "if (self.activate_show_preview == True):"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
       "E712",
       "Avoid equality comparisons to `True`; use `self.activate_show_preview:` for truth checks",
       "if self.activate_show_preview == True:"
     ],
-    "count": 4
+    "count": 5
   },
   {
     "key": [
@@ -192,7 +138,7 @@
     "key": [
       "src/brighteyes_mcs/acquisition/workers/acquisition_loop.py",
       "F811",
-      "Redefinition of unused `np` from line 13: `np` redefined here",
+      "Redefinition of unused `np` from line 15: `np` redefined here",
       "import numpy as np"
     ],
     "count": 1
@@ -300,35 +246,8 @@
     "key": [
       "src/brighteyes_mcs/acquisition/workers/fpga.py",
       "F811",
-      "Redefinition of unused `loop_fifo_read_continuously` from line 228: `loop_fifo_read_continuously` redefined here",
+      "Redefinition of unused `loop_fifo_read_continuously` from line 242: `loop_fifo_read_continuously` redefined here",
       "def loop_fifo_read_continuously(self):"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/fpga.py",
-      "W291",
-      "Trailing whitespace",
-      "self.fpgarunning.clear()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/fpga.py",
-      "W291",
-      "Trailing whitespace",
-      "self.rust_reader_ready.wait()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/acquisition/workers/fpga.py",
-      "W293",
-      "Blank line contains whitespace",
-      ""
     ],
     "count": 1
   },
@@ -337,7 +256,7 @@
       "src/brighteyes_mcs/api/rest.py",
       "B008",
       "Do not perform function call `File` in argument defaults; instead, perform the call within the function, or read the default from a module-level singleton variable",
-      "async def receive_array(file: UploadFile = File(...), shape: str = \"\", dtype: str = \"float64\"):"
+      "file: UploadFile = File(...), shape: str = \"\", dtype: str = \"float64\""
     ],
     "count": 1
   },
@@ -363,7 +282,7 @@
     "key": [
       "src/brighteyes_mcs/api/rest.py",
       "F811",
-      "Redefinition of unused `send_array` from line 352: `send_array` redefined here",
+      "Redefinition of unused `send_array` from line 337: `send_array` redefined here",
       "async def send_array():"
     ],
     "count": 1
@@ -372,7 +291,7 @@
     "key": [
       "src/brighteyes_mcs/api/rest.py",
       "F811",
-      "Redefinition of unused `send_array` from line 376: `send_array` redefined here",
+      "Redefinition of unused `send_array` from line 361: `send_array` redefined here",
       "async def send_array():"
     ],
     "count": 1
@@ -381,7 +300,7 @@
     "key": [
       "src/brighteyes_mcs/api/rest.py",
       "F811",
-      "Redefinition of unused `send_array` from line 398: `send_array` redefined here",
+      "Redefinition of unused `send_array` from line 382: `send_array` redefined here",
       "async def send_array():"
     ],
     "count": 1
@@ -400,7 +319,7 @@
       "src/brighteyes_mcs/hardware/fpga.py",
       "B016",
       "Cannot raise a literal. Did you intend to return it or raise an Exception?",
-      "raise(\"FPGA2 NOT STARTED\")"
+      "raise (\"FPGA2 NOT STARTED\")"
     ],
     "count": 1
   },
@@ -2254,7 +2173,7 @@
       "src/brighteyes_mcs/ui/table_manager.py",
       "B007",
       "Loop control variable `n` not used within loop body",
-      "for n, (name, (caption, mtype, obj, visible)) in enumerate("
+      "for n, (name, (caption, mtype, obj, visible)) in enumerate(configuration_helper.items()):"
     ],
     "count": 1
   },
@@ -2299,7 +2218,7 @@
       "src/brighteyes_mcs/ui/table_manager.py",
       "F841",
       "Local variable `nrep` is assigned to but never used",
-      "nrep = int("
+      "nrep = int(self.table_widget.item(row_headers[\"#repetition\"], column_modified).text())"
     ],
     "count": 1
   },

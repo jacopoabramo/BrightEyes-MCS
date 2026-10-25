@@ -13,6 +13,7 @@ class TableManager(object):
 
         # FIXED WITH A VERY BAD HACK - WHICH NEEDS TO BE FIXED!!
         self.table_widget.setAcceptDrops(True)
+
         def itemChanged(*event):  # noqa: N802
             self.item_changed(*event)
             self.table_widget.__class__.itemChanged(self.table_widget, *event)
@@ -37,9 +38,7 @@ class TableManager(object):
         # dictionary as configuration_helper but only "visible" are included.
         self.table_configuration = {}
 
-        for n, (name, (caption, mtype, obj, visible)) in enumerate(
-            configuration_helper.items()
-        ):
+        for n, (name, (caption, mtype, obj, visible)) in enumerate(configuration_helper.items()):
             if visible:
                 self.table_configuration[name] = (caption, mtype, obj, visible)
 
@@ -48,9 +47,7 @@ class TableManager(object):
         self.table_len_middle = len(self.table_configuration)
 
         self.table_widget.setRowCount(
-            self.table_len_header
-            + len(self.table_configuration)
-            + self.table_len_footer
+            self.table_len_header + len(self.table_configuration) + self.table_len_footer
         )
 
         self.table_widget.setColumnCount(0)
@@ -116,13 +113,9 @@ class TableManager(object):
                 )
 
         row_headers = {}
-        for row in range(
-            self.table_len_header + self.table_len_middle + self.table_len_footer
-        ):
+        for row in range(self.table_len_header + self.table_len_middle + self.table_len_footer):
             row_headers[self.table_widget.verticalHeaderItem(row).text()] = row
-        self.table_widget.setItem(
-            row_headers["Delay Software (s)"], k, QTableWidgetItem(str(0.0))
-        )
+        self.table_widget.setItem(row_headers["Delay Software (s)"], k, QTableWidgetItem(str(0.0)))
 
         self.table_lock = False
 
@@ -134,9 +127,9 @@ class TableManager(object):
 
         for selected_configuration in markers_list:
             if fcs:
-                selected_configuration["range_x"] = 0.
-                selected_configuration["range_y"] = 0.
-                selected_configuration["range_z"] = 0.
+                selected_configuration["range_x"] = 0.0
+                selected_configuration["range_y"] = 0.0
+                selected_configuration["range_z"] = 0.0
                 selected_configuration["fcs"] = True
                 self.add_dict(selected_configuration)
             else:
@@ -160,46 +153,32 @@ class TableManager(object):
             row_headers[self.table_widget.verticalHeaderItem(row).text()] = row
 
         time_res = float(
-            self.table_widget.item(
-                row_headers["Time Resolution (um)"], column_modified
-            ).text()
+            self.table_widget.item(row_headers["Time Resolution (um)"], column_modified).text()
         )
         time_bin = float(
-            self.table_widget.item(
-                row_headers["Time Bin per Pixel"], column_modified
-            ).text()
+            self.table_widget.item(row_headers["Time Bin per Pixel"], column_modified).text()
         )
         nx = int(self.table_widget.item(row_headers["#x"], column_modified).text())
         ny = int(self.table_widget.item(row_headers["#y"], column_modified).text())
-        nframe = int(
-            self.table_widget.item(row_headers["#frame"], column_modified).text()
-        )
-        nrep = int(
-            self.table_widget.item(row_headers["#repetition"], column_modified).text()
-        )
+        nframe = int(self.table_widget.item(row_headers["#frame"], column_modified).text())
+        nrep = int(self.table_widget.item(row_headers["#repetition"], column_modified).text())
 
         a = time_res * time_bin
         logger.debug("%s %s", row_headers["Pixel Dwell Time (um)"], column_modified)
 
         c = QTableWidgetItem(str(a))
         c.setFlags(c.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsEnabled)
-        self.table_widget.setItem(
-            row_headers["Pixel Dwell Time (um)"], column_modified, c
-        )
+        self.table_widget.setItem(row_headers["Pixel Dwell Time (um)"], column_modified, c)
 
         a = time_res * time_bin * nx * ny * 1e-6
         c = QTableWidgetItem(str(a))
         c.setFlags(c.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsEnabled)
-        self.table_widget.setItem(
-            row_headers["Time Single Frame (um)"], column_modified, c
-        )
+        self.table_widget.setItem(row_headers["Time Single Frame (um)"], column_modified, c)
 
         a = time_res * time_bin * nx * ny * nframe * 1e-6
         c = QTableWidgetItem(str(a))
         c.setFlags(c.flags() & ~Qt.ItemIsEditable & ~Qt.ItemIsEnabled)
-        self.table_widget.setItem(
-            row_headers["Total Acquisition Time (um)"], column_modified, c
-        )
+        self.table_widget.setItem(row_headers["Total Acquisition Time (um)"], column_modified, c)
 
         self.table_lock = False
 
@@ -212,10 +191,8 @@ class TableManager(object):
         value_string = self.table_widget.item(row_headers[row_caption], column).text()
         if value_string == "":
             value = (
-                self.table_widget.item(row_headers[row_caption], column).checkState()
-                == Qt.Checked
+                self.table_widget.item(row_headers[row_caption], column).checkState() == Qt.Checked
             )
         else:
             value = value_string
         return value
-

@@ -29,9 +29,7 @@ correlations = ["central", "sum3", "sum5"]
 chunksize = 10  # s
 correlation_result = 10  # 'resolution' of the correlation function: the higher this number, the more lag times are used
 
-[G, data] = FCSLoadAndCorrSplit(
-    fname, correlations, correlation_result, chunksize, timeTrace=True
-)
+[G, data] = FCSLoadAndCorrSplit(fname, correlations, correlation_result, chunksize, timeTrace=True)
 
 # plot time trace
 Nchunks = int((len(G.__dict__.keys()) - 4) / 3)
@@ -92,9 +90,7 @@ dummy = plt.ylabel("G")
 # fit correlations
 start = 1  # start index to fit the data, set to 15-30 to remove the afterpulse component at short lag times
 fitarray = np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # parameters to fit
-min_bound = np.array(
-    [0, 5e-2, 5e-2, 0, 0, 0, 0, 0, 0, 0, 0]
-)  # minimum values for the parameters
+min_bound = np.array([0, 5e-2, 5e-2, 0, 0, 0, 0, 0, 0, 0, 0])  # minimum values for the parameters
 max_bound = np.array(
     [1e6, 10, 10, 1, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6]
 )  # maximum values for the parameters
@@ -185,9 +181,7 @@ w02max = np.max(w02) * 1.1
 plt.figure()
 for i in range(3):
     plt.scatter(w02[i], taums[i])
-plt.plot(
-    [0, w02max], [1000 * b, 1000 * a * w02max * 1e-12 + 1000 * b], "-k", linewidth=0.2
-)
+plt.plot([0, w02max], [1000 * b, 1000 * a * w02max * 1e-12 + 1000 * b], "-k", linewidth=0.2)
 plt.xlim([0, w02max])
 plt.ylim([0, taumax])
 plt.title("Diffusion law")

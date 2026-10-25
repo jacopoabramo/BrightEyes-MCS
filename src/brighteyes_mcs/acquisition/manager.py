@@ -41,7 +41,10 @@ def create_i64_counter(initial_value=0):
 
 def _pispad23_nifpga_dimension_registers(registers, detector_model, direction=1):
     registers = dict(registers)
-    if not (detector_uses_pispad23_pipeline(detector_model) or detector_uses_pispad23_timestamp(detector_model)):
+    if not (
+        detector_uses_pispad23_pipeline(detector_model)
+        or detector_uses_pispad23_timestamp(detector_model)
+    ):
         return registers
 
     for register, offset in PISPAD23_NIFPGA_DIMENSION_OFFSETS.items():
@@ -50,7 +53,7 @@ def _pispad23_nifpga_dimension_registers(registers, detector_model, direction=1)
     return registers
 
 
-class McsManager():
+class McsManager:
     """
     Manages BrightEyes-MCS detector control, data acquisition, and processing.
 
@@ -105,7 +108,14 @@ class McsManager():
         use_rust_fifo (bool): Flag for using Rust FIFO.
         debug (bool): Debug flag.
     """
-    def __init__(self, filename="bitfiles/MyBitfileUSB.lvbitx", address="RIO0", spad_channels=25, clock_base=40):
+
+    def __init__(
+        self,
+        filename="bitfiles/MyBitfileUSB.lvbitx",
+        address="RIO0",
+        spad_channels=25,
+        clock_base=40,
+    ):
         """
         Constructor of the class of McsManager
         """
@@ -164,7 +174,7 @@ class McsManager():
             "debug_x_index_2": None,
             "max_time_bins_per_pixel": 10,
             "max_circular_point": 1,
-            'max_circular_repetition': 1,
+            "max_circular_repetition": 1,
             "max_pixel": 512,
             "max_line": 512,
             "max_frame": 1,
@@ -204,7 +214,6 @@ class McsManager():
         self.shared_fingerprint = None
         self.shared_fingerprint_mask = None
         self.shared_trace_dfd = None
-
 
         self.is_connected = False
 
@@ -262,8 +271,6 @@ class McsManager():
         self.acquisition_storage = AcquisitionStorage()
         self.acquisition_coordinator = AcquisitionCoordinator(self)
 
-
-
     def __del__(self):
         """
         Destructor of the class
@@ -309,17 +316,9 @@ class McsManager():
         mydict = {}
 
         if ch == 49:
-            mydict.update(
-                {
-                    "detector_49_channel_mode_enable": True
-                }
-            )
+            mydict.update({"detector_49_channel_mode_enable": True})
         else:
-            mydict.update(
-                {
-                    "detector_49_channel_mode_enable": False
-                }
-            )
+            mydict.update({"detector_49_channel_mode_enable": False})
 
         self.default_configuration.update(mydict)
 
@@ -374,7 +373,6 @@ class McsManager():
         Check if the acquisition is almost done
         """
         return self.acquisition_almost_done_event.is_set()
-
 
     def set_do_not_save(self, active=True):
         """
@@ -444,7 +442,6 @@ class McsManager():
         """
         logger.debug("%s %s", "set_ni_addr 2nd FPGA", ni_address)
         self.ni_address2 = ni_address
-
 
     def set_requested_fifo_depth(self, requested_fifo_depth):
         logger.debug("%s %s", "requested_fifo_depth", requested_fifo_depth)
@@ -539,12 +536,9 @@ class McsManager():
                 try:
                     self.fpga_handle.stop()
                 except Exception:
-                    logger.exception(
-                        "Could not fully clean up the failed FPGA session"
-                    )
+                    logger.exception("Could not fully clean up the failed FPGA session")
             self.fpga_handle = None
             raise RuntimeError(str(e) or "FPGA initialization failed.") from e
-
 
     def set_filename_h5(self, filename):
         """
@@ -611,13 +605,13 @@ class McsManager():
         logger.debug("fpga_process.runed from run")
         self.read_registers_dict()
         logger.debug("mcs_manager.registers_configuration")
-        logger.debug("%s %s", "mcs_manager.expected_words_data_digital", self.expected_words_data_digital)
+        logger.debug(
+            "%s %s", "mcs_manager.expected_words_data_digital", self.expected_words_data_digital
+        )
 
         self.detector_pipeline = create_detector_pipeline(self.detector_model)
         nifpga_fifos = (
-            self.activated_fifos_list
-            if detector_uses_nifpga_fifo(self.detector_model)
-            else []
+            self.activated_fifos_list if detector_uses_nifpga_fifo(self.detector_model) else []
         )
         self.fpga_handle.set_list_fifos_to_read_continously(nifpga_fifos)
 
@@ -643,10 +637,7 @@ class McsManager():
         #                    "stream_out_aux": CircularSharedBuffer(size=1024*1024*128, dtype=np.uint64), # mp.Queue()}
         #                   }
 
-        self.data_queue = {"stream_out_main":  mp.Queue(),
-                           "stream_out_aux": mp.Queue()
-                           }
-
+        self.data_queue = {"stream_out_main": mp.Queue(), "stream_out_aux": mp.Queue()}
 
         self.loc_acquired = {"stream_out_main": mp.Value("q"), "stream_out_aux": mp.Value("q")}
 
@@ -666,7 +657,12 @@ class McsManager():
         self.detector_receiver_queue = self.detector_pipeline.make_receiver_queue(self)
 
         self.number_of_threads_h5 = mp.Value("i", 0)
-        if not do_not_save and not self.raw_stream_mode and self.detector_model != DETECTOR_DISABLED and not detector_uses_pispad23_timestamp(self.detector_model):
+        if (
+            not do_not_save
+            and not self.raw_stream_mode
+            and self.detector_model != DETECTOR_DISABLED
+            and not detector_uses_pispad23_timestamp(self.detector_model)
+        ):
             (
                 self.h5_command_queue,
                 self.h5_response_queue,
@@ -736,8 +732,12 @@ class McsManager():
         self.shared_dict["time_resolution"] = self.time_resolution
         self.shared_dict["expected_words_data_digital"] = self.expected_words_data_digital
         self.shared_dict["expected_words_data_analog"] = self.expected_words_data_analog
-        self.shared_dict["expected_words_data_per_frame_digital"] = self.expected_words_data_per_frame_digital
-        self.shared_dict["expected_words_data_per_frame_analog"] = self.expected_words_data_per_frame_analog
+        self.shared_dict["expected_words_data_per_frame_digital"] = (
+            self.expected_words_data_per_frame_digital
+        )
+        self.shared_dict["expected_words_data_per_frame_analog"] = (
+            self.expected_words_data_per_frame_analog
+        )
         self.shared_dict["filenameh5"] = self.filenameh5
         self.shared_dict["DFD_nbins"] = self.dfd_nbins
         self.shared_dict["dfd_cycle_mhz"] = self.dfd_cycle_mhz
@@ -885,7 +885,11 @@ class McsManager():
                     direction=-1,
                 )
             )
-            logger.debug("%s %s", "readRegistersDict self.registers_configuration:", self.registers_configuration)
+            logger.debug(
+                "%s %s",
+                "readRegistersDict self.registers_configuration:",
+                self.registers_configuration,
+            )
         else:
             logger.debug("register_read_all() not called due to FPGAhandle not connected")
 
@@ -893,7 +897,9 @@ class McsManager():
         self.circ_repetition = self.registers_configuration["max_circular_repetition"]
         self.circ_points = self.registers_configuration["max_circular_point"]
 
-        self.time_resolution = self.registers_configuration["time_bin_dwell_cycles"] / self.clock_base
+        self.time_resolution = (
+            self.registers_configuration["time_bin_dwell_cycles"] / self.clock_base
+        )
 
         self.dim_x = self.registers_configuration["max_pixel"]
         self.dim_y = self.registers_configuration["max_line"]
@@ -905,21 +911,63 @@ class McsManager():
             self.dim_rep = trigger.repetitions
 
         self.expected_words_data_per_frame_analog = (
-                self.timebins_per_pixel * self.dim_x * self.dim_y * self.circ_repetition * self.circ_points
+            self.timebins_per_pixel
+            * self.dim_x
+            * self.dim_y
+            * self.circ_repetition
+            * self.circ_points
         )
-        logger.debug("%s %s", "self.expected_words_data_per_frame_analog calculated ", self.expected_words_data_per_frame_analog)
+        logger.debug(
+            "%s %s",
+            "self.expected_words_data_per_frame_analog calculated ",
+            self.expected_words_data_per_frame_analog,
+        )
 
         if self.spad_channels == 25:
             self.expected_words_data_per_frame_digital = (
-                2 * self.timebins_per_pixel * self.dim_x * self.dim_y * self.circ_repetition * self.circ_points
+                2
+                * self.timebins_per_pixel
+                * self.dim_x
+                * self.dim_y
+                * self.circ_repetition
+                * self.circ_points
             )
-            logger.debug("%s %s", "self.expected_words_data_per_frame_digital calculated for 25 SPAD channels ", self.expected_words_data_per_frame_digital)
-            logger.debug("%s %s %s %s %s %s %s %s %s %s %s %s %s %s", "timebins", self.timebins_per_pixel, "x", self.dim_x, "y", self.dim_y, "z", self.dim_z, "rep", self.dim_rep, "circular_repetition", self.circ_repetition, "circular_points", self.circ_points)
+            logger.debug(
+                "%s %s",
+                "self.expected_words_data_per_frame_digital calculated for 25 SPAD channels ",
+                self.expected_words_data_per_frame_digital,
+            )
+            logger.debug(
+                "%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+                "timebins",
+                self.timebins_per_pixel,
+                "x",
+                self.dim_x,
+                "y",
+                self.dim_y,
+                "z",
+                self.dim_z,
+                "rep",
+                self.dim_rep,
+                "circular_repetition",
+                self.circ_repetition,
+                "circular_points",
+                self.circ_points,
+            )
         elif self.spad_channels == 49:
             self.expected_words_data_per_frame_digital = (
-                    8 * self.timebins_per_pixel * self.dim_x * self.dim_y * self.circ_repetition * self.circ_points
+                8
+                * self.timebins_per_pixel
+                * self.dim_x
+                * self.dim_y
+                * self.circ_repetition
+                * self.circ_points
             )
-            logger.debug("%s %s", "self.expected_words_data_per_frame_digital calculated for 49 SPAD channels", self.expected_words_data_per_frame_digital)
+            logger.debug(
+                "%s %s",
+                "self.expected_words_data_per_frame_digital calculated for 49 SPAD channels",
+                self.expected_words_data_per_frame_digital,
+            )
 
         else:
             logger.debug("self.expected_words_data_per_frame_digital DISASTER")
@@ -929,7 +977,7 @@ class McsManager():
         )
 
         self.expected_words_data_analog = (
-                self.expected_words_data_per_frame_analog * self.dim_z * self.dim_rep
+            self.expected_words_data_per_frame_analog * self.dim_z * self.dim_rep
         )
 
         if trigger is not None and trigger.preview:
@@ -951,15 +999,19 @@ class McsManager():
             self.circ_repetition = self.default_configuration["max_circular_repetition"]
             self.circ_points = self.default_configuration["max_circular_point"]
 
-
-        self.fifo_chuck_size_analog = self.timebins_per_pixel * self.circ_repetition * self.circ_points
-        if self.spad_channels==25:
-            self.fifo_chuck_size_digital = 2 * self.timebins_per_pixel * self.circ_repetition * self.circ_points
+        self.fifo_chuck_size_analog = (
+            self.timebins_per_pixel * self.circ_repetition * self.circ_points
+        )
+        if self.spad_channels == 25:
+            self.fifo_chuck_size_digital = (
+                2 * self.timebins_per_pixel * self.circ_repetition * self.circ_points
+            )
             logger.debug("update_chuck self.spad_channels == 25")
         elif self.spad_channels == 49:
-            self.fifo_chuck_size_digital = 8 * self.timebins_per_pixel * self.circ_repetition * self.circ_points
+            self.fifo_chuck_size_digital = (
+                8 * self.timebins_per_pixel * self.circ_repetition * self.circ_points
+            )
             logger.debug("update_chuck self.spad_channels == 49")
-
 
         self.fpga_handle.set_fifo_chuck_size_digital(self.fifo_chuck_size_digital)
         self.fpga_handle.set_fifo_chuck_size_analog(self.fifo_chuck_size_analog)
@@ -968,16 +1020,25 @@ class McsManager():
 
         # self.fpga_handle.set_expected_words_data_digital(self.expected_words_data_per_frame_digital)
 
-        logger.debug("%s %s %s", "Updated expected_words_data_digital and fifo_chuck_size_digital", self.expected_words_data_digital, self.fifo_chuck_size_digital)
+        logger.debug(
+            "%s %s %s",
+            "Updated expected_words_data_digital and fifo_chuck_size_digital",
+            self.expected_words_data_digital,
+            self.fifo_chuck_size_digital,
+        )
 
-        logger.debug("%s %s %s", "Updated expected_words_data_analog and fifo_chuck_size_analog", self.expected_words_data_analog, self.fifo_chuck_size_analog)
-
+        logger.debug(
+            "%s %s %s",
+            "Updated expected_words_data_analog and fifo_chuck_size_analog",
+            self.expected_words_data_analog,
+            self.fifo_chuck_size_analog,
+        )
 
     def get_current_preview_element(self, fifo_name=None):
         """
         Get the current preview element
         """
-        if fifo_name==None:
+        if fifo_name == None:
             logger.debug("BUG: get_current_preview_element(None)")
         return self.loc_previewed[fifo_name].value * 2
 
@@ -985,7 +1046,7 @@ class McsManager():
         """
         Get the current acquisition element
         """
-        if fifo_name==None:
+        if fifo_name == None:
             logger.debug("BUG: get_current_acquisition_element(None)")
         return self.loc_acquired[fifo_name].value
 
@@ -993,7 +1054,7 @@ class McsManager():
         """
         Get the last preprocessed length
         """
-        if fifo_name==None:
+        if fifo_name == None:
             logger.debug("BUG: get_last_preprocessed_len(None)")
         return self.last_preprocessed_len[fifo_name]
 
@@ -1001,9 +1062,9 @@ class McsManager():
         """
         Get the expected FIFO elements
         """
-        if fifo_name=="stream_out_main":
+        if fifo_name == "stream_out_main":
             return self.expected_words_data_digital
-        elif fifo_name=="stream_out_aux":
+        elif fifo_name == "stream_out_aux":
             return self.expected_words_data_analog
         else:
             logger.debug("BUG: get_expected_fifo_elements WRONG CALL")
@@ -1013,9 +1074,9 @@ class McsManager():
         """
         Get the expected FIFO elements per frame
         """
-        if fifo_name=="stream_out_main":
+        if fifo_name == "stream_out_main":
             return self.expected_words_data_per_frame_digital
-        elif fifo_name=="stream_out_aux":
+        elif fifo_name == "stream_out_aux":
             return self.expected_words_data_per_frame_analog
         else:
             logger.debug("BUG: get_expected_fifo_elements WRONG CALL")
@@ -1121,20 +1182,19 @@ class McsManager():
         """
         Get the current z
         """
-        if fifo=="stream_out_main":
+        if fifo == "stream_out_main":
             return self.shared_dict["current_z_digital"]
-        if fifo=="stream_out_aux":
+        if fifo == "stream_out_aux":
             return self.shared_dict["current_z_analog"]
 
     def get_current_rep(self, fifo="stream_out_main"):
         """
         Get the current repetition
         """
-        if fifo=="stream_out_main":
+        if fifo == "stream_out_main":
             return self.shared_dict["current_rep_digital"]
-        if fifo=="stream_out_aux":
+        if fifo == "stream_out_aux":
             return self.shared_dict["current_rep_analog"]
-
 
     def get_total_photon(self):
         """
@@ -1264,9 +1324,7 @@ class McsManager():
         Get the time trace
         """
         a = self.shared_trace.get_numpy_handle() * 1.0
-        a[1, :] = a[1, :] / (
-            self.trace_sample_per_bins * self.time_resolution * 1e-6
-        )
+        a[1, :] = a[1, :] / (self.trace_sample_per_bins * self.time_resolution * 1e-6)
         a[0, :] = a[0, :] * self.time_resolution * 1e-6 * self.trace_sample_per_bins
         return a, self.trace_pos.value
 
@@ -1275,9 +1333,7 @@ class McsManager():
         Get the DFD trace curves.
         """
         a = self.shared_trace_dfd.get_numpy_handle() * 1.0
-        dfd_bin_width_s = (
-            self.time_resolution * 1e-6 * max(self.clk_multiplier, 1)
-        )
+        dfd_bin_width_s = self.time_resolution * 1e-6 * max(self.clk_multiplier, 1)
         if dfd_bin_width_s > 0:
             a[1, :] = a[1, :] / dfd_bin_width_s
 
@@ -1290,15 +1346,12 @@ class McsManager():
             if self.expected_words_data_per_frame_digital > 0:
                 samples_per_frame = max(
                     int(
-                        self.expected_words_data_per_frame_digital
-                        // data_words_per_sample_digital
+                        self.expected_words_data_per_frame_digital // data_words_per_sample_digital
                     ),
                     1,
                 )
                 samples_processed = samples_processed % samples_per_frame
-            completed_cycles, partial_cycle_bins = divmod(
-                samples_processed, bins_per_cycle
-            )
+            completed_cycles, partial_cycle_bins = divmod(samples_processed, bins_per_cycle)
             exposure_cycles = np.full(a.shape[1], completed_cycles, dtype=np.float64)
             exposure_cycles[: min(partial_cycle_bins, a.shape[1])] += 1.0
             exposure_time_s = exposure_cycles * dfd_bin_width_s

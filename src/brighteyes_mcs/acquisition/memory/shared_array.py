@@ -48,7 +48,14 @@ class MemorySharedNumpyArrayShmMem:
                 f"expected {self._nbytes} bytes for dtype={self.np_dtype}, shape={self.np_shape}"
             )
 
-        logger.debug("%s %s %s %s %s", "New shared array created: ", self.shm.name, "bytes ", {self._nbytes}, "bytes for dtype={self.np_dtype}, shape={self.np_shape}")
+        logger.debug(
+            "%s %s %s %s %s",
+            "New shared array created: ",
+            self.shm.name,
+            "bytes ",
+            {self._nbytes},
+            "bytes for dtype={self.np_dtype}, shape={self.np_shape}",
+        )
 
     def get_numpy_handle(self, reshape=True):
         """
@@ -61,7 +68,7 @@ class MemorySharedNumpyArrayShmMem:
             np.ndarray
         """
         # Slice only the usable part of the shared memory buffer
-        flat = np.frombuffer(self.shm.buf[:self._nbytes], dtype=self.np_dtype)
+        flat = np.frombuffer(self.shm.buf[: self._nbytes], dtype=self.np_dtype)
         if reshape:
             try:
                 return flat.reshape(self.np_shape)
@@ -78,6 +85,7 @@ class MemorySharedNumpyArrayShmMem:
     def get_name(self):
         """Return the shared memory block name."""
         return self.shm.name
+
 
 class MemorySharedNumpyArrayCtypes:
     """
@@ -125,9 +133,18 @@ class MemorySharedNumpyArrayCtypes:
         """Map Numpy dtypes to ctypes types."""
         ct = ctypes
         simple_types = [
-            ct.c_byte, ct.c_short, ct.c_int, ct.c_long, ct.c_longlong,
-            ct.c_ubyte, ct.c_ushort, ct.c_uint, ct.c_ulong, ct.c_ulonglong,
-            ct.c_float, ct.c_double
+            ct.c_byte,
+            ct.c_short,
+            ct.c_int,
+            ct.c_long,
+            ct.c_longlong,
+            ct.c_ubyte,
+            ct.c_ushort,
+            ct.c_uint,
+            ct.c_ulong,
+            ct.c_ulonglong,
+            ct.c_float,
+            ct.c_double,
         ]
         return {np.dtype(t).str: t for t in simple_types}
 
@@ -144,4 +161,3 @@ class MemorySharedNumpyArrayCtypes:
 
 
 MemorySharedNumpyArray = MemorySharedNumpyArrayCtypes
-

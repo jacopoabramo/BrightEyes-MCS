@@ -55,9 +55,7 @@ def run_with_busy_button(status_dict, threadpool, button, func, *args, **kwargs)
         button.setEnabled(en)
         button.setText(ttt)
 
-    worker = Worker(
-        call_the_function
-    )  # Any other args, kwargs are passed to the run function
+    worker = Worker(call_the_function)  # Any other args, kwargs are passed to the run function
     threadpool.start(worker)
     print(func.__name__, "Max: ", threadpool.maxThreadCount())
     print(func.__name__, "thread.start()")
