@@ -8,9 +8,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from .settings import AcquisitionConfig
 
 Triple = tuple[float, float, float]
 
@@ -455,3 +458,34 @@ class StreamSelection:
             "stream_out_aux_enable": self.analog_fifo,
             "stream_out_main_enable": self.digital_fifo,
         }
+
+
+def run_registers(config: AcquisitionConfig, *, streams: bool = True) -> list[dict[str, Any]]:
+    """Return the register dictionaries that prepare a run, in the order they are written.
+
+    Parameters
+    ----------
+    streams
+        Whether to include the stream enables; a start that only tests the
+        scan leaves them as they are.
+    """
+    writes = []
+    if config.options.circular_scan:
+        writes.append(config.pattern.registers())
+    writes.append(config.timing.registers())
+    writes.append({"detector_49_channel_mode_enable": config.detector.channels == 49})
+    writes.append(
+        {
+            **config.timing.registers(),
+            **config.scan_area.registers(),
+            **config.lasers.enable_registers(),
+            **config.lasers.sequence_registers(),
+            **config.options.registers(),
+        }
+    )
+    writes.append(config.limits.registers())
+    writes.append(config.analog_outputs.registers())
+    writes.append(config.analog_inputs.registers())
+    if streams:
+        writes.append(config.streams.registers())
+    return writes

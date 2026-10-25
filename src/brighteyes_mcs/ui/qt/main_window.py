@@ -2,6 +2,14 @@
 from brighteyes_mcs.logging_setup import default_log_dir, logger, trace_action
 from ..controllers.software_trigger import SoftwareTriggerController
 from .thumbnail import jpeg_thumbnail
+from collections.abc import Mapping
+from ...acquisition.settings import (
+    AcquisitionConfig,
+    DetectorConfig,
+    DfdConfig,
+    LiveAnalysis,
+    OutputConfig,
+)
 
 __author__ = "Mattia Donato"
 __copyright__ = "Copyright (C) 2023, Istituto Italiano di Tecnologia"
@@ -1934,6 +1942,57 @@ class MainWindow(QMainWindow):
             snake_z=self.ui.checkBox_snake_z.isChecked(),
             dfd_laser_debug=self.ui.checkBox_DFD_LaserDebug.isChecked(),
             snake_delay=self.ui.spinBox_compensation_delay.value(),
+        )
+
+    def _acquisition_config(
+        self,
+        do_not_save: bool,
+        raw_stream_mode: bool,
+        filename: str,
+        raw_files: Mapping[str, str],
+    ) -> AcquisitionConfig:
+        """Return the settings of the next run as set in the widgets.
+
+        The analog outputs are read as they are, so the auxiliary positions
+        must already be copied into them, and the streams use `dfd_enable` as
+        set at the start of the run.
+        """
+        return AcquisitionConfig(
+            scan_area=self._scan_area(),
+            timing=self._timing(),
+            pattern=self._scan_pattern(),
+            lasers=self._laser_settings(),
+            options=self._scan_options(),
+            analog_outputs=self._analog_outputs(),
+            analog_inputs=self._analog_inputs(),
+            limits=self._scan_limits(),
+            streams=self._stream_selection(),
+            detector=DetectorConfig(
+                model=self._current_detector_model(),
+                channels=int(self.ui.comboBox_spad_channels.currentText()),
+                address=self.ui.lineEdit_ni_addr.text(),
+                bitfile=self.ui.lineEdit_fpgabitfile.text(),
+                pispad23_host=self.ui.lineEdit_pispad23_ip_addr.text(),
+                pispad23_port=self.ui.spinBox_pispad23_port.value(),
+                pispad23_stream_port=self.ui.spinBox_pispad23ttm_stream_port.value(),
+                pispad23_batch_size=self.ui.spinBox_pispad23ttm_uimg_batch.value(),
+            ),
+            output=OutputConfig(
+                filename=filename,
+                save=not (do_not_save or self._mcs_saving_suppressed),
+                raw_stream=raw_stream_mode,
+                raw_files=raw_files,
+            ),
+            live=LiveAnalysis(
+                trace_bin_ms=self.ui.doubleSpinBox_binsize.value(),
+                trace_length_s=self.ui.doubleSpinBox_maxlength.value(),
+                correlation_bins=self.ui.spinBox_FCSbins.value(),
+                show_preview=self.ui.checkBox_showPreview.isChecked() and not raw_stream_mode,
+            ),
+            dfd=DfdConfig(
+                bins=self.ui.spinBox_DFD_nbins.value(),
+                clock_multiplier=self.ui.spinBox_clk_base_multiplier.value(),
+            ),
         )
 
     @Slot()
