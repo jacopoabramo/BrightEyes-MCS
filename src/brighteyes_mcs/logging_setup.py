@@ -117,7 +117,7 @@ class ResilientFileHandler(logging.FileHandler):
             report_logging_failure("file handler", error)
             return False
 
-    def handleError(self, record):
+    def handleError(self, record):  # noqa: N802
         error = sys.exc_info()[1]
         if isinstance(error, OSError):
             self._failed = True

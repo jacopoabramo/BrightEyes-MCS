@@ -30,7 +30,7 @@ class Worker(QRunnable):
         self.fn(*self.args, **self.kwargs)
 
 
-def pushButton_multithread_call(status_dict, threadpool, button, func, *args, **kwargs):
+def run_with_busy_button(status_dict, threadpool, button, func, *args, **kwargs):
     if func.__name__ in status_dict:
         print("already run")
         return

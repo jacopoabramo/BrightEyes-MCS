@@ -13,7 +13,7 @@ class TableManager(object):
 
         # FIXED WITH A VERY BAD HACK - WHICH NEEDS TO BE FIXED!!
         self.table_widget.setAcceptDrops(True)
-        def itemChanged(*event):
+        def itemChanged(*event):  # noqa: N802
             self.item_changed(*event)
             self.table_widget.__class__.itemChanged(self.table_widget, *event)
 
