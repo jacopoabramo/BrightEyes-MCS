@@ -1372,7 +1372,7 @@
       "src/brighteyes_mcs/ui/qt/main_window.py",
       "E402",
       "Module level import not at top of file",
-      "from ...acquisition.registers import ScanArea, Timing"
+      "from ...acquisition.registers import ("
     ],
     "count": 1
   },
@@ -1544,6 +1544,15 @@
       "E402",
       "Module level import not at top of file",
       "from pathlib import Path"
+    ],
+    "count": 1
+  },
+  {
+    "key": [
+      "src/brighteyes_mcs/ui/qt/main_window.py",
+      "E402",
+      "Module level import not at top of file",
+      "import dataclasses"
     ],
     "count": 1
   },
