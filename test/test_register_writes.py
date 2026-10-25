@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from brighteyes_mcs.acquisition.detectors.models import DETECTOR_PISPAD23, DETECTOR_SPAD_ARRAY
+from brighteyes_mcs.acquisition.manager import McsManager
 from brighteyes_mcs.acquisition.registers import run_registers
 from brighteyes_mcs.acquisition.settings import AcquisitionConfig
 from brighteyes_mcs.ui.qt.main_window import MainWindow
@@ -379,3 +381,67 @@ def test_run_registers_set_49_channel_mode() -> None:
     detector = dataclasses.replace(config.detector, channels=49)
     writes = run_registers(dataclasses.replace(config, detector=detector))
     assert writes[2] == {"detector_49_channel_mode_enable": True}
+
+
+@pytest.fixture
+def manager() -> McsManager:
+    """Return a manager connected to a recording FPGA handle."""
+    instance = McsManager()
+    instance.is_connected = True
+    instance.fpga_handle = MagicMock()
+    return instance
+
+
+def test_prepare_run_writes_run_registers(manager: McsManager) -> None:
+    """Write each start dictionary in order and return them merged."""
+    config = start_config()
+    written = manager.prepare_run(config)
+    expected = run_registers(config)
+    merged = {name: value for registers in expected for name, value in registers.items()}
+    assert_same_writes([written], [to_json(merged)])
+    assert [call.args[0] for call in manager.fpga_handle.register_write_checked.call_args_list] == [
+        name for registers in expected for name in registers
+    ]
+
+
+@pytest.mark.parametrize(("dfd", "multiplier"), [(False, 1), (True, 3)])
+def test_prepare_run_clock_multiplier(manager: McsManager, dfd: bool, multiplier: int) -> None:
+    """Use the DFD clock multiplier only while DFD is on."""
+    config = start_config()
+    streams = dataclasses.replace(config.streams, dfd=dfd)
+    manager.prepare_run(dataclasses.replace(config, streams=streams))
+    assert manager.clk_multiplier == multiplier
+
+
+@pytest.mark.parametrize(
+    ("model", "host"), [(DETECTOR_PISPAD23, "10.0.0.5"), (DETECTOR_SPAD_ARRAY, "127.0.0.1")]
+)
+def test_prepare_run_pispad23_connection(manager: McsManager, model: str, host: str) -> None:
+    """Set the PISPAD23 host only for a detector on the PISPAD23 pipeline."""
+    config = start_config()
+    detector = dataclasses.replace(config.detector, model=model)
+    manager.prepare_run(dataclasses.replace(config, detector=detector))
+    assert manager.pispad23_host == host
+
+
+def test_prepare_run_raw_stream(manager: McsManager) -> None:
+    """Set the raw output files and hide the preview in raw stream mode."""
+    window = make_window([])
+    window.dfd_enable = False
+    window.ui.checkBox_showPreview.setValue(True)
+    files = {"stream_out_main": "C:/data/run_FIFO.raw"}
+    manager.prepare_run(
+        window._acquisition_config(False, True, "C:/data/run_only_metadata.h5", files)
+    )
+    assert manager.raw_output_files == files
+    assert manager.activate_show_preview is False
+
+
+def test_start_pulses_run_command(manager: McsManager) -> None:
+    """Clear stop and raise start, then lower start, as one fresh edge per run."""
+    assert manager.start() == {"stop_command": False, "start_command": False}
+    assert [call.args for call in manager.fpga_handle.register_write_checked.call_args_list] == [
+        ("stop_command", False),
+        ("start_command", True),
+        ("start_command", False),
+    ]
