@@ -1,6 +1,7 @@
 """Pin the register values the main window writes, through any refactoring."""
 
 import copy
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from brighteyes_mcs.acquisition.registers import run_registers
+from brighteyes_mcs.acquisition.settings import AcquisitionConfig
 from brighteyes_mcs.ui.qt.main_window import MainWindow
 
 
@@ -173,6 +176,8 @@ def make_widgets():
         "spinBox_pispad23ttm_uimg_batch": 64,
         "lineEdit_pispad23_ip_addr": "10.0.0.5",
         "spinBox_pispad23_port": 9997,
+        "lineEdit_ni_addr": "RIO0",
+        "lineEdit_fpgabitfile": "bitfiles/MyBitfileUSB.lvbitx",
     }
     sequence = (1, 2, 4, 8, 3, 5, 6, 7, 9, 10, 11, 12)
     values.update({f"comboLaserSeq_{n}": laser for n, laser in enumerate(sequence, 1)})
@@ -338,3 +343,39 @@ def test_start_sequence_settings_match_baseline() -> None:
     assert actual.keys() == BASELINE["start_settings"].keys()
     for name, expected in BASELINE["start_settings"].items():
         assert_same_value(actual[name], expected, name)
+
+
+def start_config(**fields: Any) -> AcquisitionConfig:
+    """Return the window's run configuration for the harness widgets, with `fields` replaced."""
+    window = make_window([])
+    window.dfd_enable = False
+    window._sync_auxiliary_position_outputs()
+    config = window._acquisition_config(True, False, "C:/data/run.h5", {})
+    return dataclasses.replace(config, **fields)
+
+
+def test_run_registers_match_baseline() -> None:
+    """Return the eight start dictionaries of the baseline, in order."""
+    assert_same_writes(run_registers(start_config()), BASELINE["start"][:8])
+
+
+def test_run_registers_skip_pattern_without_circular_scan() -> None:
+    """Leave out the circular pattern when the circular scan is off."""
+    config = start_config()
+    options = dataclasses.replace(config.options, circular_scan=False)
+    writes = run_registers(dataclasses.replace(config, options=options))
+    assert len(writes) == 7
+    assert all("circular_scan_x_volts" not in registers for registers in writes)
+
+
+def test_run_registers_skip_streams() -> None:
+    """Leave out the stream enables for the test-mode start."""
+    assert_same_writes(run_registers(start_config(), streams=False), BASELINE["start"][:7])
+
+
+def test_run_registers_set_49_channel_mode() -> None:
+    """Turn on 49-channel mode for a 49-channel detector."""
+    config = start_config()
+    detector = dataclasses.replace(config.detector, channels=49)
+    writes = run_registers(dataclasses.replace(config, detector=detector))
+    assert writes[2] == {"detector_49_channel_mode_enable": True}
