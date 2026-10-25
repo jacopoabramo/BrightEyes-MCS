@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import socket
 import threading
+import time
 
 import h5py
 import numpy as np
@@ -15,7 +16,7 @@ from brighteyes_mcs.acquisition.detectors.pispad23.emulator import (
     parse_cs,
     run_server,
 )
-from test.acquisition_harness import CHANNEL_MAX, RunAcquisitionLoop
+from test.acquisition_harness import RunAcquisitionLoop
 
 SCAN_X, SCAN_Y, FRAMES = 6, 4, 2
 
@@ -27,6 +28,21 @@ def free_port() -> int:
         return port
 
 
+def start_emulator() -> int:
+    """Start the emulator in a daemon thread and return its port once it accepts."""
+    port = free_port()
+    threading.Thread(target=run_server, args=("127.0.0.1", port), daemon=True).start()
+    deadline = time.monotonic() + 10.0
+    while True:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=1.0).close()
+            return port
+        except OSError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
 @pytest.mark.parametrize("line", ["CS,2.0,1,6,4\n", "XS,2.0,1,6,4,0\n"], ids=["fields", "verb"])
 def test_parse_cs_rejects_malformed_commands(line: str) -> None:
     """Reject a command with the wrong number of fields or the wrong verb."""
@@ -35,9 +51,8 @@ def test_parse_cs_rejects_malformed_commands(line: str) -> None:
 
 
 def test_emulator_frames_reach_the_file(run_acquisition_loop: RunAcquisitionLoop) -> None:
-    """Write each emulated frame's scene to its plane, clipped to the channel widths."""
-    port = free_port()
-    threading.Thread(target=run_server, args=("127.0.0.1", port), daemon=True).start()
+    """Write each emulated frame's scene to its plane."""
+    port = start_emulator()
     words_per_frame = SCAN_X * SCAN_Y * 2
     source = PISPAD23TcpBunchSource(
         mp.Value("q", words_per_frame),
@@ -66,6 +81,6 @@ def test_emulator_frames_reach_the_file(run_acquisition_loop: RunAcquisitionLoop
         data = h5file["data"][()]
     assert data.shape == (1, FRAMES, SCAN_Y, SCAN_X, 1, 25)
     for z in range(FRAMES):
-        scene = make_scene(SCAN_X, SCAN_Y, 23, seed=z).transpose(1, 2, 0).astype(np.uint64)
-        np.testing.assert_array_equal(data[0, z, :, :, 0, :23], np.minimum(scene, CHANNEL_MAX[:23]))
+        scene = make_scene(SCAN_X, SCAN_Y, 23, seed=z).transpose(1, 2, 0)
+        np.testing.assert_array_equal(data[0, z, :, :, 0, :23], scene)
         np.testing.assert_array_equal(data[0, z, :, :, 0, 23:], 0)
