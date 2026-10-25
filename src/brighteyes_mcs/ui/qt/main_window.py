@@ -4517,11 +4517,7 @@ class MainWindow(QMainWindow):
         """
         pattern = dataclasses.replace(self._scan_pattern(), point_count=circular_points)
         self.X_array_um, self.Y_array_um, self.Z_array_um = pattern.offsets_um()
-        calib_xx, calib_yy, calib_zz = pattern.calibration_um_per_volt
-
-        self.X_array = self.X_array_um / calib_xx
-        self.Y_array = self.Y_array_um / calib_yy
-        self.Z_array = self.Z_array_um / calib_zz
+        self.X_array, self.Y_array, self.Z_array = pattern.volts()
 
         self.marker_plot_circular_scan.clear()
 

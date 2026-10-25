@@ -269,13 +269,20 @@ class ScanPattern:
             x, y = lissajous_offsets(radius_um, self.point_count)
         return x, y, np.zeros(self.point_count)
 
+    def volts(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return the x, y and z voltages of the path points."""
+        x, y, z = (
+            offsets / calibration
+            for offsets, calibration in zip(
+                self.offsets_um(), self.calibration_um_per_volt, strict=True
+            )
+        )
+        return x, y, z
+
     def registers(self) -> dict[str, Any]:
         """Return the path in volts, each axis padded to 32 points by repeating its last one."""
         registers = {}
-        for axis, offsets, calibration in zip(
-            "xyz", self.offsets_um(), self.calibration_um_per_volt, strict=True
-        ):
-            volts = offsets / calibration
+        for axis, volts in zip("xyz", self.volts(), strict=True):
             if volts.shape[0] < CIRCULAR_REGISTER_LENGTH:
                 volts = np.pad(volts, (0, CIRCULAR_REGISTER_LENGTH - volts.shape[0]), mode="edge")
             registers[f"circular_scan_{axis}_volts"] = volts
