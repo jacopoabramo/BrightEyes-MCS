@@ -48,6 +48,7 @@ jobs:
           test/test_pointer_decoding.py test/test_spad_words.py test/test_h5_manager.py
           test/test_lifetime_baseline.py test/test_check_distribution.py test/test_package_version.py
           test/test_thumbnail.py src/brighteyes_mcs/ui/qt/thumbnail.py
+          test/test_registers.py src/brighteyes_mcs/acquisition/registers.py
 
   external-links:
     name: External documentation links (advisory)
