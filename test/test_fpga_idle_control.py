@@ -139,30 +139,9 @@ def test_fpga_handle_propagates_worker_initialization_error():
     process_type.return_value.start.assert_called_once_with()
 
 
-def test_run_command_stays_asserted_when_connection_will_close():
+def test_run_command_is_pulsed():
+    """Pulse the run command, because the session stays open between runs."""
     window = MainWindow.__new__(MainWindow)
-    window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=MagicMock(
-            isChecked=MagicMock(return_value=False)
-        )
-    )
-    window.setRegistersDict = MagicMock()
-
-    window.sendCmdRun()
-
-    assert window.setRegistersDict.call_args_list == [
-        call({"stop_command": False, "start_command": False}),
-        call({"start_command": True}),
-    ]
-
-
-def test_run_command_is_pulsed_when_connection_is_kept():
-    window = MainWindow.__new__(MainWindow)
-    window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=MagicMock(
-            isChecked=MagicMock(return_value=True)
-        )
-    )
     window.setRegistersDict = MagicMock()
 
     window.sendCmdRun()
@@ -173,44 +152,65 @@ def test_run_command_is_pulsed_when_connection_is_kept():
     ]
 
 
-def test_cold_acquisition_connects_then_resets_fpga_before_first_run():
+def connected_window():
     window = MainWindow.__new__(MainWindow)
     window.FPGA_IDLE_TIMEOUT_SECONDS = 5.0
-    window.mcs_manager = MagicMock(is_connected=False)
+    window.ui = MagicMock()
+    window.ui.checkBox_pulsing_forced.isChecked.return_value = False
+    window.ui.checkBox_DFD.isChecked.return_value = False
+    window._current_detector_model = MagicMock(return_value="spad")
+    window.spad_channels = 25
+    window.configurationFPGA_dict = {}
+    window.mcs_manager = MagicMock(is_connected=True)
+    window._connected_settings = window._connection_settings()
+    session = MagicMock()
+    window.disconnectFPGA = session.disconnect
+    window.connectFPGA = session.connect
+    return window, session
 
-    def connect():
-        window.mcs_manager.is_connected = True
 
-    window.connectFPGA = MagicMock(side_effect=connect)
+def test_run_refuses_to_start_without_a_session():
+    """Refuse to start a run while disconnected instead of connecting."""
+    window, session = connected_window()
+    window.mcs_manager.is_connected = False
+
+    with pytest.raises(RuntimeError, match="not connected"):
+        window._prepare_fpga_for_acquisition()
+
+    session.connect.assert_not_called()
+    window.mcs_manager.quick_reset_fpga.assert_not_called()
+
+
+def test_run_resets_fpga_and_replays_controls_without_command_edges():
+    """Reset the scan before a run and replay controls, never command edges."""
+    window, session = connected_window()
+    window.ui.checkBox_pulsing_forced.isChecked.return_value = True
     window.configurationFPGA_dict = {"laser_force_pulsing_enable": True, "start_command": True}
-    window.ui = SimpleNamespace(
-        checkBox_pulsing_forced=MagicMock(isChecked=MagicMock(return_value=True)),
-        checkBox_DFD=MagicMock(isChecked=MagicMock(return_value=False)),
-    )
 
     window._prepare_fpga_for_acquisition()
 
-    window.connectFPGA.assert_called_once_with()
+    assert session.mock_calls == []
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
     window.mcs_manager.set_registers_dict.assert_any_call({"laser_force_pulsing_enable": True})
     window.mcs_manager.set_registers_dict.assert_any_call({"laser_time_bin_mode_enable": True, "max_laser_time_bin": 1})
     assert all("start_command" not in c.args[0] for c in window.mcs_manager.set_registers_dict.call_args_list)
 
 
-def test_reused_fpga_is_reset_before_another_run():
-    window = MainWindow.__new__(MainWindow)
-    window.FPGA_IDLE_TIMEOUT_SECONDS = 5.0
-    window.mcs_manager = MagicMock(is_connected=True)
-    window.connectFPGA = MagicMock()
+@pytest.mark.parametrize(
+    ("widget", "accessor", "value"),
+    [
+        ("lineEdit_fpgabitfile", "text", "other.lvbitx"),
+        ("checkBox_fifo_analog", "isChecked", True),
+    ],
+)
+def test_changed_connection_setting_reopens_session_before_run(widget, accessor, value):
+    """Close and reopen the session before a run when a setting fixed at connect changed."""
+    window, session = connected_window()
+    getattr(getattr(window.ui, widget), accessor).return_value = value
 
-    window.configurationFPGA_dict = {"time_bin_dwell_cycles": 123}
-    window.ui = SimpleNamespace(
-        checkBox_pulsing_forced=MagicMock(isChecked=MagicMock(return_value=False)),
-        checkBox_DFD=MagicMock(isChecked=MagicMock(return_value=False)),
-    )
     window._prepare_fpga_for_acquisition()
 
-    window.connectFPGA.assert_not_called()
+    assert session.mock_calls == [call.disconnect(), call.connect()]
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
 
 
@@ -226,57 +226,73 @@ def test_completed_filename_is_published_to_console_as_absolute_path(tmp_path):
     )
 
 
-def acquisition_window(keep_connected):
+def window_with_controls(connected):
     window = MainWindow.__new__(MainWindow)
     window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=MagicMock(
-            isChecked=MagicMock(return_value=keep_connected)
-        ),
+        checkBox_fpga_connect_at_startup=MagicMock(),
+        pushButton_fpga_connection_cmd=MagicMock(),
+        pushButton_previewStart=MagicMock(),
+        pushButton_acquisitionStart=MagicMock(),
         label_FPGA_status=MagicMock(),
+        statusBar=MagicMock(),
     )
-    window.mcs_manager = MagicMock(is_connected=True)
-    window._keep_fpga_on_requested = keep_connected
+    window.mcs_manager = MagicMock(is_connected=connected)
     window.timerPreviewImg = MagicMock()
-    window.sendCmdStop = MagicMock()
+    window.started_normal = False
+    window.started_preview = False
     return window
 
 
-def test_keep_connected_leaves_fpga_loaded_after_idle_reset():
-    window = acquisition_window(keep_connected=True)
+def test_stop_leaves_session_open():
+    """Reset the scan after a run without closing the FPGA session."""
+    window = window_with_controls(connected=True)
 
     window.stopAcquisition()
 
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
+    window.mcs_manager.stop_acquisition.assert_called_once_with()
     window.mcs_manager.stop_fpga.assert_not_called()
-    window.mcs_manager.stop_acquisition.assert_called_once_with(
-        keep_fpga_loaded=True
-    )
 
 
-def test_unchecked_keep_connected_closes_fpga_after_run():
-    window = acquisition_window(keep_connected=False)
+def test_failed_stop_reset_closes_session():
+    """Close the session when the scan does not return to idle after a run."""
+    window = window_with_controls(connected=True)
+    window.mcs_manager.quick_reset_fpga.side_effect = TimeoutError("not idle")
 
-    window.stopAcquisition()
+    with pytest.raises(TimeoutError):
+        window.stopAcquisition()
 
-    window.sendCmdStop.assert_not_called()
-    window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
+    window.mcs_manager.stop_acquisition.assert_called_once_with()
     window.mcs_manager.stop_fpga.assert_called_once_with()
-    window.mcs_manager.stop_acquisition.assert_called_once_with(
-        keep_fpga_loaded=False
-    )
 
 
-def test_automatic_connection_does_not_enable_keep_fpga_on():
-    window = acquisition_window(keep_connected=False)
+@pytest.mark.parametrize("enabled", [True, False])
+def test_startup_connects_only_when_setting_is_on(enabled):
+    """Open the session at startup only when the setting asks for it."""
+    window = window_with_controls(connected=False)
+    window.ui.checkBox_fpga_connect_at_startup.isChecked.return_value = enabled
+    window.connectFPGA = MagicMock()
+    window._fpgaWatchdogTick = MagicMock()
 
-    window._update_fpga_connection_button()
-    window.stopAcquisition()
+    window._connect_fpga_at_startup()
 
-    window.ui.pushButton_fpga_connection_cmd.setChecked.assert_called_with(False)
-    window.mcs_manager.stop_fpga.assert_called_once_with()
-    window.mcs_manager.stop_acquisition.assert_called_once_with(
-        keep_fpga_loaded=False
-    )
+    assert window.connectFPGA.called is enabled
+
+
+def test_failed_startup_connect_leaves_runs_disabled():
+    """Show the error once and keep Preview and Acquisition disabled after a failed startup connect."""
+    window = window_with_controls(connected=False)
+    window.ui.checkBox_fpga_connect_at_startup.isChecked.return_value = True
+    error = RuntimeError("no board")
+    window.connectFPGA = MagicMock(side_effect=error)
+    window._show_fpga_initialization_error = MagicMock()
+
+    window._connect_fpga_at_startup()
+
+    window._show_fpga_initialization_error.assert_called_once_with(error)
+    for button in (window.ui.pushButton_previewStart, window.ui.pushButton_acquisitionStart):
+        button.setEnabled.assert_called_with(False)
+        assert call(True) not in button.setEnabled.call_args_list
 
 
 def test_connect_fpga_forces_fsm_commands_low():
@@ -308,17 +324,9 @@ def test_connect_fpga_forces_fsm_commands_low():
     assert initial_registers["stop_command"] is False
 
 
-def test_connection_button_reflects_successful_manual_connect():
-    window = MainWindow.__new__(MainWindow)
-    button = MagicMock()
-    window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=button,
-        label_FPGA_status=MagicMock(),
-        statusBar=MagicMock(),
-    )
-    window.mcs_manager = MagicMock(is_connected=False)
-    window.started_normal = False
-    window.started_preview = False
+def test_connect_button_enables_runs():
+    """Connect from the button and enable Preview and Acquisition."""
+    window = window_with_controls(connected=False)
 
     def connect():
         window.mcs_manager.is_connected = True
@@ -330,20 +338,16 @@ def test_connection_button_reflects_successful_manual_connect():
 
     window.connectFPGA.assert_called_once_with()
     window._fpgaWatchdogTick.assert_called_once_with()
-    button.setChecked.assert_called_with(True)
-    button.setText.assert_called_with("Disconnect FPGA")
+    window.ui.pushButton_fpga_connection_cmd.setChecked.assert_called_with(True)
+    window.ui.pushButton_fpga_connection_cmd.setText.assert_called_with("Disconnect FPGA")
+    window.ui.pushButton_previewStart.setEnabled.assert_called_with(True)
+    window.ui.pushButton_acquisitionStart.setEnabled.assert_called_with(True)
 
 
 def test_disconnect_button_stops_running_acquisition_first():
-    window = MainWindow.__new__(MainWindow)
-    window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=MagicMock(),
-        label_FPGA_status=MagicMock(),
-        statusBar=MagicMock(),
-    )
-    window.mcs_manager = MagicMock(is_connected=True)
+    """Stop a running acquisition before disconnecting from the button."""
+    window = window_with_controls(connected=True)
     window.started_normal = True
-    window.started_preview = False
 
     def stop_running_acquisition():
         window.mcs_manager.is_connected = False
@@ -354,36 +358,27 @@ def test_disconnect_button_stops_running_acquisition_first():
 
     window.stop.assert_called_once_with()
     window.ui.pushButton_fpga_connection_cmd.setChecked.assert_called_with(False)
-    window.ui.pushButton_fpga_connection_cmd.setText.assert_called_with(
-        "Keep FPGA On"
-    )
+    window.ui.pushButton_fpga_connection_cmd.setText.assert_called_with("Connect FPGA")
 
 
-def test_disconnect_fpga_closes_session_and_releases_button():
-    window = MainWindow.__new__(MainWindow)
-    button = MagicMock()
-    window.ui = SimpleNamespace(
-        pushButton_fpga_connection_cmd=button,
-        label_FPGA_status=MagicMock(),
-    )
-    window.mcs_manager = MagicMock(is_connected=True)
-    window.timerPreviewImg = MagicMock()
+def test_disconnect_fpga_closes_session_and_disables_runs():
+    """Close the session on disconnect and disable Preview and Acquisition."""
+    window = window_with_controls(connected=True)
+    window.FPGA_IDLE_TIMEOUT_SECONDS = 5.0
     window._fpga_watchdog_blink_on = True
 
     window.disconnectFPGA()
 
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
     window.mcs_manager.stop_fpga.assert_called_once_with()
-    window.mcs_manager.stop_acquisition.assert_called_once_with(
-        keep_fpga_loaded=False
-    )
+    window.mcs_manager.stop_acquisition.assert_called_once_with()
     assert window.mcs_manager.is_connected is False
-    button.setChecked.assert_called_with(False)
-    window.ui.label_FPGA_status.setText.assert_called_with(
-        "● FPGA disconnected"
-    )
+    window.ui.pushButton_fpga_connection_cmd.setChecked.assert_called_with(False)
+    window.ui.pushButton_previewStart.setEnabled.assert_called_with(False)
+    window.ui.pushButton_acquisitionStart.setEnabled.assert_called_with(False)
+    window.ui.label_FPGA_status.setText.assert_called_with("● FPGA disconnected")
     window.ui.label_FPGA_status.setToolTip.assert_called_with(
-        "Waiting for a Preview / Acquisition or the Keep FPGA On button."
+        "Click Connect FPGA to open the FPGA session."
     )
 
 

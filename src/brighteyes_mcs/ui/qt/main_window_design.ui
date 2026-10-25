@@ -892,6 +892,19 @@ Ctrl+Drag/Wheel/Double-Click: microscope</string>
                        </property>
                       </widget>
                      </item>
+                     <item row="13" column="0" colspan="2">
+                      <widget class="QCheckBox" name="checkBox_fpga_connect_at_startup">
+                       <property name="toolTip">
+                        <string>Open the FPGA session once when the application starts</string>
+                       </property>
+                       <property name="text">
+                        <string>Connect to the FPGA at startup</string>
+                       </property>
+                       <property name="checked">
+                        <bool>true</bool>
+                       </property>
+                      </widget>
+                     </item>
                      <item row="8" column="1">
                       <spacer name="horizontalSpacer_24">
                        <property name="orientation">
@@ -3579,7 +3592,7 @@ Ctrl+Drag/Wheel/Double-Click: microscope</string>
           <item row="0" column="0" colspan="2">
            <widget class="QLabel" name="label_FPGA_status">
             <property name="toolTip">
-             <string>Waiting for a Preview / Acquisition or the Keep FPGA On button.</string>
+             <string>Click Connect FPGA to open the FPGA session.</string>
             </property>
             <property name="text">
              <string/>
@@ -3589,10 +3602,10 @@ Ctrl+Drag/Wheel/Double-Click: microscope</string>
           <item row="1" column="0">
            <widget class="QPushButton" name="pushButton_fpga_connection_cmd">
             <property name="toolTip">
-             <string>Keep the FPGA connected between acquisitions</string>
+             <string>Load the FPGA firmware and keep it connected</string>
             </property>
             <property name="text">
-             <string>Keep FPGA On</string>
+             <string>Connect FPGA</string>
             </property>
             <property name="checkable">
              <bool>true</bool>

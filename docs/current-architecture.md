@@ -332,10 +332,15 @@ There are presently two related state models:
 They are not yet one unified state machine. When changing start/stop behavior,
 check both the GUI transition and the backend coordinator state.
 
-The FPGA connection preference is also distinct from live connection state:
-an acquisition can connect automatically, while only an explicit **Keep FPGA
-On** choice preserves the session after the run. The watchdog reads
-`debug_scan_fsm_status`; quick reset pulses `stop_command` and waits for idle.
+The window opens one FPGA session and keeps it until the user disconnects, the
+application exits, or the scan fails to return to idle after a run. The
+**Connect to the FPGA at startup** setting, on by default, opens the session
+when the window appears; otherwise **Connect FPGA** opens it, and Preview and
+Acquisition stay disabled until it is open. Runs never connect. A run that
+finds a setting fixed at connect changed, such as the bitfile, the NI address
+or the FIFO selection, closes and reopens the session before it starts. The
+watchdog reads `debug_scan_fsm_status`; quick reset pulses `stop_command` and
+waits for idle.
 
 ## Storage contracts
 

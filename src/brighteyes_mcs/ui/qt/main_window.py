@@ -615,10 +615,7 @@ class MainWindow(QMainWindow):
         )
         self.updateLaserForcePulsingAvailability()
         self._fpga_watchdog_blink_on = False
-        # This is a user preference, not a mirror of the live connection
-        # state.  Acquisitions connect the FPGA automatically, but that must
-        # not opt in to keeping the session alive after the run.
-        self._keep_fpga_on_requested = False
+        self._connected_settings = None
         self.timerFPGAWatchdog = QTimer(self)
         self.timerFPGAWatchdog.setInterval(self.FPGA_WATCHDOG_INTERVAL_MS)
         self.timerFPGAWatchdog.timeout.connect(self._fpgaWatchdogTick)
@@ -1469,6 +1466,12 @@ class MainWindow(QMainWindow):
             self.ui.lineEdit_ni2addr,
             False,
         )
+        configuration_helper["fpga_connect_at_startup"] = (
+            "Connect FPGA at startup",
+            bool,
+            self.ui.checkBox_fpga_connect_at_startup,
+            False,
+        )
 
         configuration_helper["spad_cmd_length"] = (
             "SPAD Command Length",
@@ -2249,6 +2252,15 @@ class MainWindow(QMainWindow):
         logger.debug("Launch the QTimer.singleShot")
         QTimer.singleShot(100, self.raise_)
         QTimer.singleShot(250, self.showMaximized)
+        # After showMaximized, so a connection error opens over the window.
+        QTimer.singleShot(300, self._connect_fpga_at_startup)
+
+    def _connect_fpga_at_startup(self):
+        """Open the FPGA session if the startup setting asks for it."""
+        if self.ui.checkBox_fpga_connect_at_startup.isChecked():
+            self.fpgaConnectionButtonClicked(True)
+        else:
+            self._update_fpga_connection_button()
 
     @Slot()
     def showEvent(self, event):
@@ -3255,10 +3267,32 @@ class MainWindow(QMainWindow):
                 self.mcs_manager.connect(mydict, list_fifos=fifo)
             except Exception as e:
                 raise RuntimeError(str(e) or "FPGA initialization failed.") from e
+            self._connected_settings = self._connection_settings()
 
             # self.mcs_manager.start()
 
         self._update_fpga_connection_button()
+
+    def _connection_settings(self):
+        """Return the settings that take effect only when the FPGA session opens."""
+        return (
+            self.ui.lineEdit_fpgabitfile.text(),
+            self.ui.lineEdit_ni_addr.text(),
+            self.ui.lineEdit_fpga2bitfile.text(),
+            self.ui.lineEdit_ni2addr.text(),
+            self.ui.spinBox_fifo_timeout.value(),
+            self.ui.comboBox_fifobackend.currentText(),
+            self._current_detector_model(),
+            self.ui.lineEdit_spad_data.text(),
+            self.ui.lineEdit_spad_length.text(),
+            self.ui.checkBox_spad_invert.isChecked(),
+            self.spad_channels,
+            self.ui.spinBox_preview_buffer_samples.value(),
+            self.ui.checkBox_fifo_analog.isChecked(),
+            self.ui.checkBox_fifo_digital.isChecked(),
+            self.ui.spinBox_fifo_prebuffer_length.value(),
+            self.ui.spinBox_requested_fifo_depth.value(),
+        )
 
     def setRegistersDict(self, myconf):
         """
@@ -4349,12 +4383,6 @@ class MainWindow(QMainWindow):
         self.ui.pushButton_acquisitionStart.setEnabled(False)
         self.ui.pushButton_externalProgram.setEnabled(False)
         self.ui.pushButton_stop.setEnabled(True)
-
-        if not self.mcs_manager.is_connected:
-            logger.debug("not self.mcs_manager.is_connected")
-            self.connectFPGA()
-        else:
-            logger.debug("FPGA Already connected!")
 
         self.updatePreviewConfiguration()
 
@@ -6566,18 +6594,11 @@ Have fun!
         self.stop()
 
     def _update_fpga_connection_button(self):
-        """Reflect whether FPGA firmware is currently loaded."""
+        """Reflect whether FPGA firmware is currently loaded, and allow runs only while it is."""
         connected = bool(self.mcs_manager.is_connected)
-        keep_requested = bool(
-            getattr(self, "_keep_fpga_on_requested", False)
-        )
         button = self.ui.pushButton_fpga_connection_cmd
-        button.setChecked(connected and keep_requested)
-        button.setText(
-            "Disconnect FPGA"
-            if connected and keep_requested
-            else "Keep FPGA On"
-        )
+        button.setChecked(connected)
+        button.setText("Disconnect FPGA" if connected else "Connect FPGA")
         button.setToolTip(
             "Stop any active acquisition, reset, and disconnect the FPGA"
             if connected
@@ -6585,9 +6606,11 @@ Have fun!
         )
         if not connected:
             self._fpga_watchdog_blink_on = False
+            self.ui.pushButton_previewStart.setEnabled(False)
+            self.ui.pushButton_acquisitionStart.setEnabled(False)
             self.ui.label_FPGA_status.setText("● FPGA disconnected")
             self.ui.label_FPGA_status.setStyleSheet("color: #808080;")
-            self.ui.label_FPGA_status.setToolTip("Waiting for a Preview / Acquisition or the Keep FPGA On button.")
+            self.ui.label_FPGA_status.setToolTip("Click Connect FPGA to open the FPGA session.")
 
     @Slot()
     def _fpgaWatchdogTick(self):
@@ -6635,7 +6658,6 @@ Have fun!
 
     def disconnectFPGA(self):
         """Stop FPGA activity and close the hardware session."""
-        self._keep_fpga_on_requested = False
         if not self.mcs_manager.is_connected:
             self._update_fpga_connection_button()
             return
@@ -6656,7 +6678,7 @@ Have fun!
             self.timerPreviewImg.stop()
             self.mcs_manager.stop_fpga()
         finally:
-            self.mcs_manager.stop_acquisition(keep_fpga_loaded=False)
+            self.mcs_manager.stop_acquisition()
             self.mcs_manager.is_connected = False
             self._update_fpga_connection_button()
 
@@ -6667,7 +6689,6 @@ Have fun!
     @trace_action
     def fpgaConnectionButtonClicked(self, checked):
         """Connect when checked; stop, reset, and disconnect when unchecked."""
-        self._keep_fpga_on_requested = bool(checked)
         try:
             if not checked:
                 if self.started_normal or self.started_preview:
@@ -6678,11 +6699,11 @@ Have fun!
             elif not self.mcs_manager.is_connected:
                 self.connectFPGA()
                 self._fpgaWatchdogTick()
+                self.ui.pushButton_previewStart.setEnabled(True)
+                self.ui.pushButton_acquisitionStart.setEnabled(True)
                 self.ui.statusBar.showMessage("FPGA connected and idle.", 5000)
         except Exception as error:
             logger.exception("Could not change the FPGA connection state")
-            self._keep_fpga_on_requested = False
-            self.ui.pushButton_fpga_connection_cmd.setChecked(False)
             self._show_fpga_initialization_error(error)
         finally:
             self._update_fpga_connection_button()
@@ -7302,12 +7323,14 @@ Have fun!
         self.beginAcquisition(is_preview=False)
 
     def _prepare_fpga_for_acquisition(self):
-        """Connect when necessary and reset the scan FSM before each run."""
+        """Reset the scan FSM before each run, reopening the session if its settings changed."""
         if not self.mcs_manager.is_connected:
-            logger.debug("FPGA not connected, connecting now...")
+            raise RuntimeError("The FPGA is not connected. Connect it before starting a run.")
+        if self._connection_settings() != self._connected_settings:
+            logger.info("FPGA connection settings changed; reopening the session")
+            self.ui.statusBar.showMessage("FPGA settings changed, reconnecting.", 5000)
+            self.disconnectFPGA()
             self.connectFPGA()
-        else:
-            logger.debug("FPGA already connected")
 
         # A freshly loaded firmware is not guaranteed to have observed a stop
         # command.  Without this pulse the first start can be ignored, while a
@@ -8039,16 +8062,6 @@ Have fun!
         trigger = getattr(self, "software_trigger", None)
         if trigger is not None and trigger.active:
             trigger.before_stop()
-        # Do not infer this from the hardware connection: every acquisition
-        # connects automatically.  Only an explicit click on Keep FPGA On
-        # should preserve the session after a manual or natural stop.
-        keep_fpga_loaded = bool(
-            getattr(
-                self,
-                "_keep_fpga_on_requested",
-                self.ui.pushButton_fpga_connection_cmd.isChecked(),
-            )
-        )
         reset_error = None
         try:
             self.mcs_manager.quick_reset_fpga(
@@ -8060,20 +8073,17 @@ Have fun!
             self.mcs_manager.stop_preview()
             self.timerPreviewImg.stop()
             logger.debug("self.timerPreviewImg.stop()")
-            if not keep_fpga_loaded:
-                self.mcs_manager.stop_fpga()
-            self.mcs_manager.stop_acquisition(
-                keep_fpga_loaded=keep_fpga_loaded and reset_error is None
-            )
+            self.mcs_manager.stop_acquisition()
             self.mcs_manager.stop_preview()
+            # A scan FSM that did not return to idle cannot start the next run.
+            if reset_error is not None:
+                self.mcs_manager.stop_fpga()
             self._update_fpga_connection_button()
 
         if trigger is not None and trigger.active:
             trigger.finish()
 
         if reset_error is not None:
-            if keep_fpga_loaded:
-                self.mcs_manager.stop_fpga()
             raise reset_error
 
     @Slot()
@@ -8167,15 +8177,9 @@ Have fun!
         """
         send the run command to the FPGA
         """
-        if self.ui.pushButton_fpga_connection_cmd.isChecked():
-            # A reused VI needs a fresh edge for every acquisition.
-            self.setRegistersDict({"stop_command": False, "start_command": True})
-            self.setRegistersDict({"start_command": False})
-        else:
-            # Preserve the normal firmware protocol: Run remains asserted until
-            # the acquisition is stopped and the FPGA session is closed.
-            self.setRegistersDict({"stop_command": False, "start_command": False})
-            self.setRegistersDict({"start_command": True})
+        # The session stays open between runs, so every run needs a fresh edge.
+        self.setRegistersDict({"stop_command": False, "start_command": True})
+        self.setRegistersDict({"start_command": False})
 
     def sendCmdStop(self):
         """

@@ -1087,8 +1087,11 @@ class McsManager:
         stop the FPGA
         """
         logger.debug("stopAcquisition.stop()")
-        if self.fpga_handle is not None:
-            self.fpga_handle.stop()
+        try:
+            if self.fpga_handle is not None:
+                self.fpga_handle.stop()
+        finally:
+            self.is_connected = False
 
     def wait_for_fpga_idle(self, timeout=5.0, poll_interval=0.01):
         """Wait until the scan state machine reports its idle state."""
@@ -1141,7 +1144,7 @@ class McsManager:
         self.process_supervisor.stop("receiver", timeout=5)
         self.detector_receiver_process = None
 
-    def stop_acquisition(self, keep_fpga_loaded=False):
+    def stop_acquisition(self):
         """
         Stop the acquisition
         """
@@ -1149,8 +1152,6 @@ class McsManager:
         self._stop_detector_receiver()
         if self.data_process is not None:
             self.data_process.stop()
-        if not keep_fpga_loaded:
-            self.is_connected = False
 
     def stop_preview(self):
         """Stop acquisition through the application coordinator."""
