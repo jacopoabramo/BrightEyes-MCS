@@ -56,6 +56,7 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         window.mcs_manager.fpga_handle.register_read.return_value = {
             "laser_off_after_measurement_enable": False, "laser_force_pulsing_enable": False}
         window.setRegistersDict = MethodType(MainWindow.setRegistersDict, window)
+        window._scan_area = MethodType(MainWindow._scan_area, window)
         window._offset_volts = MethodType(MainWindow._offset_volts, window)
         window._update_offset_voltage_labels = MethodType(MainWindow._update_offset_voltage_labels, window)
         window.lock_parameters_changed_call = False

@@ -139,6 +139,7 @@ class TestMyClass(unittest.TestCase):
             spinBox_AnalogOut={channel: ValueControl(0.0) for channel in range(8)},
         )
         instance = SimpleNamespace(ui=ui, setRegistersDict=MagicMock())
+        instance._auxiliary_axes = lambda: MainWindow._auxiliary_axes(instance)
         instance._auxiliary_axis_voltages = lambda: MainWindow._auxiliary_axis_voltages(instance)
         instance._sync_auxiliary_position_outputs = lambda: MainWindow._sync_auxiliary_position_outputs(instance)
 
