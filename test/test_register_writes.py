@@ -3,6 +3,7 @@
 import copy
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -260,18 +261,29 @@ def to_json(value):
     return value
 
 
+def value_types(value: Any) -> Any:
+    """Return the type name of `value`, element by element for a list."""
+    if isinstance(value, list):
+        return [value_types(item) for item in value]
+    return type(value).__name__
+
+
+def assert_same_value(actual: Any, expected: Any, name: str) -> None:
+    """Assert that `actual` equals the recorded `expected` in value and type."""
+    actual = to_json(actual)
+    assert value_types(actual) == value_types(expected), name
+    if isinstance(expected, (bool, str)):
+        assert actual == expected, name
+    else:
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12, err_msg=name)
+
+
 def assert_same_writes(actual, expected):
     assert len(actual) == len(expected)
     for actual_registers, expected_registers in zip(actual, expected, strict=True):
         assert actual_registers.keys() == expected_registers.keys()
         for name, expected_value in expected_registers.items():
-            actual_value = to_json(actual_registers[name])
-            if isinstance(expected_value, bool):
-                assert actual_value == expected_value, name
-            else:
-                np.testing.assert_allclose(
-                    actual_value, expected_value, rtol=0, atol=1e-12, err_msg=name
-                )
+            assert_same_value(actual_registers[name], expected_value, name)
 
 
 BASELINE = json.loads(
@@ -288,3 +300,9 @@ def test_start_sequence_writes_match_baseline():
 def test_live_slot_writes_match_baseline(slot):
     """Write the same register dictionaries from each live slot as before the move."""
     assert_same_writes(record_live_writes()[slot], BASELINE["live"][slot])
+
+
+def test_harness_rejects_a_changed_value_type() -> None:
+    """Fail the comparison when a value keeps its number but changes type."""
+    with pytest.raises(AssertionError):
+        assert_same_writes([{"max_pixel": 1}], [{"max_pixel": 1.0}])
