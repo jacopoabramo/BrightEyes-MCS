@@ -449,5 +449,86 @@
   {
    "start_command": false
   }
- ]
+ ],
+ "start_settings": {
+  "pispad23_batch_size": 64,
+  "pispad23_stream_port": 9998,
+  "set_activate_snake_walk_xy": [
+   true
+  ],
+  "set_activate_snake_walk_z": [
+   true
+  ],
+  "set_activated_fifo": [
+   [
+    "stream_out_main",
+    "stream_out_aux"
+   ]
+  ],
+  "set_autocorrelation_maxx": [
+   20
+  ],
+  "set_clk_multiplier": [
+   1
+  ],
+  "set_compensation_delay_for_snake": [
+   7
+  ],
+  "set_dfd_enable": [
+   false
+  ],
+  "set_dfd_nbins": [
+   50
+  ],
+  "set_do_not_save": [
+   true
+  ],
+  "set_filename_h5": [
+   "C:/data/run.h5"
+  ],
+  "set_fingerprint_mask": [
+   [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ]
+  ],
+  "set_raw_stream_mode": [
+   false
+  ],
+  "set_show_preview": [
+   false
+  ],
+  "set_spad_channels": [
+   25
+  ],
+  "set_trace_bins": [
+   8000
+  ],
+  "set_trace_sample_per_bins": [
+   200
+  ]
+ }
 }
