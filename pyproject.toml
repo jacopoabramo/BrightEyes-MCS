@@ -75,7 +75,7 @@ Issues = "https://github.com/VicidominiLab/BrightEyes-MCS/issues"
 [tool.uv.build-backend]
 module-name = "brighteyes_mcs"
 module-root = "src"
-wheel-exclude = ["*.lvbitx", "*.exe"]
+source-exclude = ["*.lvbitx", "*.exe"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

@@ -6,15 +6,16 @@
 > after explicitly enabling the workflow and configuring the publisher.
 > Public release availability has not been verified for this guide.
 
-The repository uses a root package layout: the import package is
-`src/brighteyes_mcs/`, built with the `uv_build` backend, which packages that
-directory only. A move to `src/brighteyes_mcs/` is not required for
-publication.
+The import package is `src/brighteyes_mcs/`, built with the `uv_build`
+backend, which packages that directory only.
 
 The Python package contains application code, default configuration, Qt forms,
-the About page, and application icons. FPGA `.lvbitx` firmware, user or lab
-configuration, notebooks, logs, installers, and development data are not part
-of the distributions.
+the About page, and application icons. The build leaves out FPGA `.lvbitx`
+firmware and `.exe` files but packages every other file under
+`src/brighteyes_mcs/`, untracked ones included. `scripts/check_distribution.py`
+therefore refuses an archive holding any configuration file other than
+`cfg/default.cfg` and `cfg/plugins_cfg/*.cfg`, and a release is built from a
+clean checkout.
 
 BrightEyes-MCS intentionally declares no console or GUI script entry point.
 This prevents pip from generating `brighteyes-mcs.exe` on Windows. Users launch

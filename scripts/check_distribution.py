@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from email.parser import BytesParser
 from email.policy import default
 from pathlib import Path
@@ -28,6 +29,19 @@ REQUIRED_WHEEL_FILES = {
     "brighteyes_mcs/ui/qt/main_window_design.ui",
     "brighteyes_mcs/ui/qt/ttm_widget_design.ui",
 }
+
+
+SHIPPED_CONFIGURATION = re.compile(r"brighteyes_mcs/cfg/(default|plugins_cfg/[^/]+)\.cfg$")
+
+
+def _is_local_file(name: str) -> bool:
+    if name.endswith((".exe", ".lvbitx")):
+        return True
+    return (
+        "brighteyes_mcs/cfg/" in name
+        and name.endswith(".cfg")
+        and SHIPPED_CONFIGURATION.search(name) is None
+    )
 
 
 def _one_match(directory: Path, pattern: str) -> Path:
@@ -58,11 +72,7 @@ def check_distribution(directory: Path) -> None:
     if missing:
         raise RuntimeError(f"Required wheel resources are missing: {missing}")
 
-    forbidden_wheel_files = sorted(
-        name
-        for name in wheel_names
-        if name.endswith((".exe", ".lvbitx", "/mifobio.cfg", "/provacfg.cfg"))
-    )
+    forbidden_wheel_files = sorted(name for name in wheel_names if _is_local_file(name))
     if forbidden_wheel_files:
         raise RuntimeError(f"Local or proprietary files entered the wheel: {forbidden_wheel_files}")
 
@@ -78,9 +88,7 @@ def check_distribution(directory: Path) -> None:
 
     with tarfile.open(sdist, "r:gz") as archive:
         forbidden_sdist_files = sorted(
-            name
-            for name in archive.getnames()
-            if name.endswith((".exe", ".lvbitx", "/mifobio.cfg", "/provacfg.cfg"))
+            name for name in archive.getnames() if _is_local_file(name)
         )
     if forbidden_sdist_files:
         raise RuntimeError(f"Local or proprietary files entered the sdist: {forbidden_sdist_files}")
