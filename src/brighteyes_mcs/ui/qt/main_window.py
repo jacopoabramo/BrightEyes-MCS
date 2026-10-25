@@ -1933,6 +1933,7 @@ class MainWindow(QMainWindow):
             snake_xy=self.ui.checkBox_snake.isChecked(),
             snake_z=self.ui.checkBox_snake_z.isChecked(),
             dfd_laser_debug=self.ui.checkBox_DFD_LaserDebug.isChecked(),
+            snake_delay=self.ui.spinBox_compensation_delay.value(),
         )
 
     @Slot()

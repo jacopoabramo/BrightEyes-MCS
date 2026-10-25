@@ -219,10 +219,10 @@ Logs normally go to `%LOCALAPPDATA%/BrightEyes-MCS/log`; `BRIGHTEYES_LOG_DIR`
 can override the location.
 
 The `.cfg` files are JSON payloads despite the extension. The legacy key schema
-is a stable external contract. `LegacyConfigurationCodec` preserves it, while
-`LegacyConfigurationTranslator` can build typed `AcquisitionConfig` data.
-Currently, the main window still consumes the legacy dictionary directly; the
-typed configuration is not yet the main runtime representation.
+is a stable external contract. `LegacyConfigurationCodec` preserves it by
+reading and writing the files as dictionaries. A run is prepared from a typed
+`AcquisitionConfig` instead, which the main window builds from its widgets and
+passes to `McsManager.prepare_run`.
 
 ## Runtime composition
 
@@ -487,8 +487,8 @@ and RAW acquisition, stop/reconnect, HDF5 conversion, TTM, plug-ins and REST.
   configuration, rendering and finalization details.
 - `McsManager` is still a large mutable legacy backend, with newer coordinator,
   storage, process and detector abstractions embedded inside it.
-- Typed `AcquisitionConfig` exists, but the legacy configuration dictionary is
-  still the effective GUI/runtime contract.
+- A run is prepared from a typed `AcquisitionConfig`, but `.cfg` files are
+  still read and written as legacy dictionaries.
 - GUI lifecycle and backend lifecycle are separate state representations.
 - Several plug-ins still access main-window internals.
 - Generated `main_window_design.py` is large and changes whenever the `.ui` file

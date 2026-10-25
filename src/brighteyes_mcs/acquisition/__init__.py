@@ -5,7 +5,7 @@ from .process_supervisor import ProcessSupervisor
 from .shared_memory import SharedMemoryRegistry
 from .storage import AcquisitionStorage
 from .preview import PreviewRepository
-from .settings import AcquisitionConfig, DetectorConfig, OutputConfig, ScanGeometry
+from .settings import AcquisitionConfig, DetectorConfig, DfdConfig, LiveAnalysis, OutputConfig
 from .state import AcquisitionState
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "AcquisitionConfig",
     "AcquisitionState",
     "DetectorConfig",
+    "DfdConfig",
+    "LiveAnalysis",
     "OutputConfig",
-    "ScanGeometry",
 ]

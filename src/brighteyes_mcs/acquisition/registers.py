@@ -310,7 +310,14 @@ class LaserSettings:
 
 @dataclass(frozen=True)
 class ScanOptions:
-    """The flags of a run that no other settings group covers."""
+    """The flags of a run that no other settings group covers.
+
+    Parameters
+    ----------
+    snake_delay
+        The compensation delay the manager applies to snake-walk data; no
+        register holds it.
+    """
 
     circular_scan: bool
     dummy_data: bool
@@ -321,6 +328,7 @@ class ScanOptions:
     snake_xy: bool
     snake_z: bool
     dfd_laser_debug: bool
+    snake_delay: int
 
     def registers(self) -> dict[str, Any]:
         """Return the flags under their register names."""
