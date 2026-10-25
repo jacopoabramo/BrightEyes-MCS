@@ -1,6 +1,7 @@
 """main_window.py: BrightEyes-MCS - MainWindow."""
 from brighteyes_mcs.logging_setup import default_log_dir, logger, trace_action
 from ..controllers.software_trigger import SoftwareTriggerController
+from .thumbnail import jpeg_thumbnail
 
 __author__ = "Mattia Donato"
 __copyright__ = "Copyright (C) 2023, Istituto Italiano di Tecnologia"
@@ -7962,7 +7963,11 @@ Have fun!
                     raw_stream_metadata,
                 )
             else:
-                h5mgr.metadata_add_thumbnail(self.im_widget.imageItem)
+                try:
+                    h5mgr.metadata_add_thumbnail(jpeg_thumbnail(self.im_widget.imageItem))
+                except Exception:
+                    # a missing thumbnail must not lose the acquisition file
+                    logger.debug("Thumbnail creation ERROR", exc_info=True)
             h5mgr.print_keys()
 
             logger.debug("%s %s", "currentImage_size", self.currentImage_size)

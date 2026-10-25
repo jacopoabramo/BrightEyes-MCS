@@ -22,6 +22,7 @@ QT_MODULES = {
     "test_mainwindow.py",
     "test_restapi.py",
     "test_scispinbox.py",
+    "test_thumbnail.py",
 }
 
 
