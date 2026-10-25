@@ -219,7 +219,7 @@ def test_laser_sequence_is_padded_to_24() -> None:
 
 def test_scan_options_registers() -> None:
     """Write the run flags under their register names, with the DFD trigger fixed at 5."""
-    options = ScanOptions(True, False, True, 1, True, False, True, False, True)
+    options = ScanOptions(True, False, True, 1, True, False, True, False, True, 0)
     assert options.registers() == {
         "circular_scan_enable": True,
         "dummy_data_enable": False,

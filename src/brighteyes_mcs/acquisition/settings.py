@@ -2,40 +2,84 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class ScanGeometry:
-    pixels: int = 1
-    lines: int = 1
-    frames: int = 1
-    repetitions: int = 1
-    timebins_per_pixel: int = 1
+from .registers import (
+    AnalogInputs,
+    AnalogOutputs,
+    LaserSettings,
+    ScanArea,
+    ScanLimits,
+    ScanOptions,
+    ScanPattern,
+    StreamSelection,
+    Timing,
+)
 
 
 @dataclass(frozen=True)
 class DetectorConfig:
-    model: str = "SPAD Array"
-    channels: int = 25
-    address: str = "RIO0"
-    bitfile: str = ""
-    pispad23_host: str = "127.0.0.1"
-    pispad23_port: int = 9997
+    """The detector and the FPGA that reads it."""
+
+    model: str
+    channels: int
+    address: str
+    bitfile: str
+    pispad23_host: str
+    pispad23_port: int
+    pispad23_stream_port: int
+    pispad23_batch_size: int
 
 
 @dataclass(frozen=True)
 class OutputConfig:
-    filename: Path = Path("DEFAULT.h5")
-    raw_stream: bool = False
-    raw_files: Mapping[str, Path] = field(default_factory=dict)
+    """Where the run writes its data, and whether it writes any.
+
+    Parameters
+    ----------
+    raw_files
+        The raw output file of each FIFO, used only when `raw_stream` is on.
+    """
+
+    filename: str
+    save: bool
+    raw_stream: bool
+    raw_files: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class LiveAnalysis:
+    """The live trace, correlation and preview computed while the run goes."""
+
+    trace_bin_ms: float
+    trace_length_s: float
+    correlation_bins: int
+    show_preview: bool
+
+
+@dataclass(frozen=True)
+class DfdConfig:
+    """The digital frequency domain settings, used while `StreamSelection.dfd` is on."""
+
+    bins: int
+    clock_multiplier: int
 
 
 @dataclass(frozen=True)
 class AcquisitionConfig:
-    geometry: ScanGeometry = field(default_factory=ScanGeometry)
-    detector: DetectorConfig = field(default_factory=DetectorConfig)
-    output: OutputConfig = field(default_factory=OutputConfig)
-    legacy: Mapping[str, Any] = field(default_factory=dict, compare=False, repr=False)
+    """Every setting a run is prepared from."""
+
+    scan_area: ScanArea
+    timing: Timing
+    pattern: ScanPattern
+    lasers: LaserSettings
+    options: ScanOptions
+    analog_outputs: AnalogOutputs
+    analog_inputs: AnalogInputs
+    limits: ScanLimits
+    streams: StreamSelection
+    detector: DetectorConfig
+    output: OutputConfig
+    live: LiveAnalysis
+    dfd: DfdConfig
