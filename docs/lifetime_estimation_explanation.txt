@@ -21,7 +21,7 @@ Code path:
 - MainWindow.timerPreviewImg_tick(...)
 
 What is fitted:
-- The GUI gets the DFD trace from getDfdTrace().
+- The GUI gets the DFD trace from get_dfd_trace().
 - trace_sum = dfd_trace[2, :] is the cumulative photon-arrival histogram.
 - This is the curve shown in gray on the DFD trace widget.
 - The white curve is the live trace, rescaled to the same vertical range.
@@ -283,7 +283,7 @@ It stores a 3-plane floating array called image_xy_hcl:
 - C plane = quality
 - L plane = brightness (raw summed counts)
 
-This is why getPreviewHclImage() returns a 3-channel float image, not the final
+This is why get_preview_hcl_image() returns a 3-channel float image, not the final
 displayed colors.
 
 

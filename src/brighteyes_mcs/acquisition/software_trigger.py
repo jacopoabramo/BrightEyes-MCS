@@ -42,14 +42,14 @@ class SoftwareTriggerSession:
         if self.laser_off:
             registers.update(laser_off_after_measurement_enable=True,
                              wait_laser_first_time_only_enable=False)
-        self.manager.setRegistersDict(registers)
+        self.manager.set_registers_dict(registers)
         if self.laser_off:
             self.lasers_off()
 
     def lasers_off(self):
         # Disable forced pulsing before the individual laser enables.
-        self.manager.setRegistersDict({"laser_force_pulsing_enable": False})
-        self.manager.setRegistersDict(dict.fromkeys(self.lasers, False))
+        self.manager.set_registers_dict({"laser_force_pulsing_enable": False})
+        self.manager.set_registers_dict(dict.fromkeys(self.lasers, False))
 
     def arm(self):
         if self.state != "preparing":
@@ -85,7 +85,7 @@ class SoftwareTriggerSession:
         if set(hardware) & {"axis_start_offset_volts", "axis_calibration_volts_per_step"}:
             hardware["axis_start_offset_volts"] = self.frame_offsets()
         try:
-            self.manager.setRegistersDict(hardware)
+            self.manager.set_registers_dict(hardware)
         except Exception:
             self.preview_geometry = previous
             raise
@@ -98,14 +98,14 @@ class SoftwareTriggerSession:
         try:
             self.manager.quick_reset_fpga()
             offsets = self.frame_offsets()
-            self.manager.setRegistersDict({"axis_start_offset_volts": offsets})
+            self.manager.set_registers_dict({"axis_start_offset_volts": offsets})
             if self.laser_off:
-                self.manager.setRegistersDict(self.lasers)
-                self.manager.setRegistersDict({"laser_force_pulsing_enable": bool(
+                self.manager.set_registers_dict(self.lasers)
+                self.manager.set_registers_dict({"laser_force_pulsing_enable": bool(
                     self.requested.get("laser_force_pulsing_enable", False))})
-            self.manager.setRegistersDict({"stop_command": False, "start_command": False})
-            self.manager.setRegistersDict({"start_command": True})
-            self.manager.setRegistersDict({"start_command": False})
+            self.manager.set_registers_dict({"stop_command": False, "start_command": False})
+            self.manager.set_registers_dict({"start_command": True})
+            self.manager.set_registers_dict({"start_command": False})
             self.issued += 1
             self.timestamps.append(time.time())
             self.started_at = time.monotonic()
@@ -128,7 +128,7 @@ class SoftwareTriggerSession:
         for fifo in self.manager.activated_fifos_list:
             if self.manager.raw_stream_mode:
                 counts.append(self.manager.loc_acquired[fifo].value //
-                              self.manager.getExpectedFifoElementsPerFrame(fifo))
+                              self.manager.get_expected_fifo_elements_per_frame(fifo))
             else:
                 counts.append(self.manager.shared_dict.get(f"software_trigger_frames_{fifo}", 0))
         return min(counts, default=0)
@@ -179,7 +179,7 @@ class SoftwareTriggerSession:
         registers = {name: self.requested.get(name, False) for name in names}
         if self.preview:
             registers.update(self.preview_geometry)
-        self.manager.setRegistersDict(registers)
+        self.manager.set_registers_dict(registers)
         # With inter-frame gating selected, leave outputs off after Stop as well.
         # The GUI retains the user's laser selection for the next session.
         if self.laser_off and self.manager.is_connected:

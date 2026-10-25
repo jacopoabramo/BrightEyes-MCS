@@ -74,7 +74,7 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         ui.checkBox_sw_trigger_enable.setChecked(True)
         ui.checkBox_sw_trigger_laser_off.setChecked(True)
         controller.prepare(preview=preview)
-        window.mcs_manager.readRegistersDict()
+        window.mcs_manager.read_registers_dict()
         controller.arm()
         assert "Armed" in controller.label.text()
         for name in controller.GEOMETRY_WIDGET_NAMES:

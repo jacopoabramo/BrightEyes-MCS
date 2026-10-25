@@ -47,7 +47,7 @@ def make_session(**kwargs):
     session = SoftwareTriggerSession(manager, **kwargs)
     manager.software_trigger_session = session
     session.prepare()
-    manager.readRegistersDict()
+    manager.read_registers_dict()
     session.arm()
     return manager, session
 
@@ -72,7 +72,7 @@ def test_single_frame_hardware_preserves_full_software_shape_and_counts():
 def test_unselected_mode_still_uses_hardware_dimensions():
     manager = manager_stub()
     manager.software_trigger_session = None
-    manager.readRegistersDict()
+    manager.read_registers_dict()
     assert (manager.dim_z, manager.dim_rep) == (3, 2)
     assert manager.expected_words_data_digital == 96
     manager.fpga_handle.register_write_checked.assert_not_called()
