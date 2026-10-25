@@ -61,12 +61,24 @@ class PISPAD23DataPreProcess(mp.Process):
                         digital_words_per_sample=self.digital_words_per_sample,
                     )
                 except Exception as exc:
-                    logger.exception("PISPAD23 decode failed fifo=%s samples=%s: %s",
-                                     fifo_name, raw_bunch.sample_count, exc)
+                    logger.exception(
+                        "PISPAD23 decode failed fifo=%s samples=%s: %s",
+                        fifo_name,
+                        raw_bunch.sample_count,
+                        exc,
+                    )
                     continue
                 if decoded.size == 0:
                     continue
-                logger.debug("%s %s %s %s %s %s", "PISPAD23DataPreProcess decoded", fifo_name, "samples", raw_bunch.sample_count, "words", decoded.size)
+                logger.debug(
+                    "%s %s %s %s %s %s",
+                    "PISPAD23DataPreProcess decoded",
+                    fifo_name,
+                    "samples",
+                    raw_bunch.sample_count,
+                    "words",
+                    decoded.size,
+                )
                 pispad23_debug(
                     "preprocess decoded",
                     fifo_name,
@@ -87,4 +99,3 @@ class PISPAD23DataPreProcess(mp.Process):
         logger.debug("PISPAD23DataPreProcess STOP")
         self.stop_event.set()
         self.terminate()
-

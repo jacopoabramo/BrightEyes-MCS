@@ -87,15 +87,24 @@ class PISPAD23ReceiverProcess(mp.Process):
                 try:
                     bunch = self.source.read_bunch(fifo_name)
                 except Exception as exc:
-                    logger.exception("PISPAD23 receive failed fifo=%s endpoint=%s:%s scan=%sx%s frames=%s: %s",
-                                     fifo_name, self.source.host, self.source.port,
-                                     self.source.scan_x, self.source.scan_y, self.source.scan_frames, exc)
+                    logger.exception(
+                        "PISPAD23 receive failed fifo=%s endpoint=%s:%s scan=%sx%s frames=%s: %s",
+                        fifo_name,
+                        self.source.host,
+                        self.source.port,
+                        self.source.scan_x,
+                        self.source.scan_y,
+                        self.source.scan_frames,
+                        exc,
+                    )
                     self.stop_event.set()
                     break
                 if bunch is None:
                     continue
                 self.queue_out.put({fifo_name: [bunch, bunch.sample_count]})
-                logger.debug("%s %s %s", "PISPAD23ReceiverProcess queued", fifo_name, bunch.sample_count)
+                logger.debug(
+                    "%s %s %s", "PISPAD23ReceiverProcess queued", fifo_name, bunch.sample_count
+                )
                 pispad23_debug("receiver queued", fifo_name, bunch.sample_count, enabled=self.debug)
                 emitted_any = True
 
@@ -107,4 +116,3 @@ class PISPAD23ReceiverProcess(mp.Process):
     def stop(self):
         logger.debug("PISPAD23ReceiverProcess STOP")
         self.stop_event.set()
-

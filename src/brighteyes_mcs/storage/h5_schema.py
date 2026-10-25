@@ -7,8 +7,10 @@ from typing import Any
 
 DATA_FORMAT_VERSION = "0.0.1"
 H5_METADATA_GROUPS = (
-    "configurationSpadFCSmanager", "configurationFPGA",
-    "configurationGUI", "configurationGUI_beforeStart",
+    "configurationSpadFCSmanager",
+    "configurationFPGA",
+    "configurationGUI",
+    "configurationGUI_beforeStart",
 )
 RAW_METADATA_GROUP = "rawStreamAcquisition"
 
@@ -72,12 +74,8 @@ def legacy_raw_stream_metadata(
         "analog_expected_words": runtime.get("stream_out_aux_expected_words", 0),
         "digital_expected_bytes": runtime.get("stream_out_main_expected_bytes", 0),
         "analog_expected_bytes": runtime.get("stream_out_aux_expected_bytes", 0),
-        "digital_actual_bytes_on_disk": runtime.get(
-            "stream_out_main_actual_bytes_on_disk", 0
-        ),
-        "analog_actual_bytes_on_disk": runtime.get(
-            "stream_out_aux_actual_bytes_on_disk", 0
-        ),
+        "digital_actual_bytes_on_disk": runtime.get("stream_out_main_actual_bytes_on_disk", 0),
+        "analog_actual_bytes_on_disk": runtime.get("stream_out_aux_actual_bytes_on_disk", 0),
         "raw_writer_stop_reason": runtime.get("raw_writer_stop_reason", ""),
         "raw_writer_error": runtime.get("raw_writer_error", ""),
     }
@@ -85,9 +83,7 @@ def legacy_raw_stream_metadata(
         payload.update(
             {
                 "detector_model": acquisition.detector_model,
-                "pispad23_raw_stream_format": runtime.get(
-                    "pispad23_raw_stream_format", ""
-                ),
+                "pispad23_raw_stream_format": runtime.get("pispad23_raw_stream_format", ""),
             }
         )
     return payload

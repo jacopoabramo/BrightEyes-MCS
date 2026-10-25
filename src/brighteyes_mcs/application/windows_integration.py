@@ -278,9 +278,7 @@ def create_desktop_shortcuts(
             )
         )
     if include_system_root:
-        links.append(
-            create_system_root_shortcut(system_root_path, shell=shell)
-        )
+        links.append(create_system_root_shortcut(system_root_path, shell=shell))
     return links
 
 

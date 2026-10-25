@@ -10,6 +10,7 @@ import os
 import time
 import psutil
 
+
 class DataPreProcess(mp.Process):
     def __init__(
         self,
@@ -50,7 +51,7 @@ class DataPreProcess(mp.Process):
         self.dict_of_dtype_queue_array_out = dict_of_dtype_queue_array_out
 
         self.len_buffer = len_buffer
-        self.timeout = 0 #0.1
+        self.timeout = 0  # 0.1
 
     @logged_worker
     def run(self):
@@ -74,7 +75,7 @@ class DataPreProcess(mp.Process):
             if not self.queue_in.empty():
                 dict_from_queue = self.queue_in.get()
                 # debug(dict_from_queue.keys())
-                #fifo_name = list(dict_from_queue.keys())[0]
+                # fifo_name = list(dict_from_queue.keys())[0]
                 for fifo_name in dict_from_queue.keys():
                     data, len_values = dict_from_queue[fifo_name]
                     if not (fifo_name in pre_buffer_list):
@@ -96,10 +97,9 @@ class DataPreProcess(mp.Process):
                 time_stop[fifo_name] = time.time()
                 delta_time[fifo_name] = time_stop[fifo_name] - time_start[fifo_name]
                 # print(delta_time[fifo_name])
-                if (
-                    pre_buffer_len[fifo_name] > len_buffer
-                    or delta_time[fifo_name] > timeout
-                ) and (pre_buffer_len[fifo_name] > 0):
+                if (pre_buffer_len[fifo_name] > len_buffer or delta_time[fifo_name] > timeout) and (
+                    pre_buffer_len[fifo_name] > 0
+                ):
                     time_start[fifo_name] = time.time()
                     # Convert the accumulated Python list back to a contiguous array
                     # only when the downstream worker is ready to consume it.
@@ -111,8 +111,7 @@ class DataPreProcess(mp.Process):
 
                     self.dict_of_queue_array_out[fifo_name].put(data_as_array)
                     self.dict_of_shared_loc[fifo_name].value = (
-                        self.dict_of_shared_loc[fifo_name].value
-                        + pre_buffer_len[fifo_name]
+                        self.dict_of_shared_loc[fifo_name].value + pre_buffer_len[fifo_name]
                     )
                     self.last_preprocessed_len[fifo_name].value = pre_buffer_len[fifo_name]
                     # print("-> ", self.dict_of_shared_loc[fifo_name].value)
@@ -142,4 +141,3 @@ class DataPreProcess(mp.Process):
 
 class SpadDataPreProcess(DataPreProcess):
     """SPAD-named FIFO preprocessing worker."""
-

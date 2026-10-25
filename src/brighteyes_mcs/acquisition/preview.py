@@ -24,9 +24,12 @@ class PreviewRepository:
 
     def get_preview_image(self, projection="xy", rgb=False):
         name = {
-            "xy": "shared_image_xy", "yx": "shared_image_xy",
-            "xz": "shared_image_xz", "zx": "shared_image_xz",
-            "zy": "shared_image_zy", "yz": "shared_image_zy",
+            "xy": "shared_image_xy",
+            "yx": "shared_image_xy",
+            "xz": "shared_image_xz",
+            "zx": "shared_image_xz",
+            "zy": "shared_image_zy",
+            "yz": "shared_image_zy",
         }.get(projection)
         if name is None:
             raise ValueError("Unsupported preview projection: %s" % projection)

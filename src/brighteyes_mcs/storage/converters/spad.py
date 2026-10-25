@@ -92,7 +92,9 @@ def _resolve_raw_stream_path(raw_cfg, metadata_filename: Path, attr_name: str, d
     if candidate is not None and candidate.exists():
         return candidate
 
-    fallback = metadata_filename.with_name(_base_stem_from_metadata(metadata_filename) + default_suffix)
+    fallback = metadata_filename.with_name(
+        _base_stem_from_metadata(metadata_filename) + default_suffix
+    )
     if fallback.exists():
         return fallback.resolve()
 
@@ -213,7 +215,9 @@ def _load_metadata(metadata_filename: Path):
         gui_cfg = _group_attrs_to_dict(h5file["configurationGUI"])
         raw_cfg = _group_attrs_to_dict(h5file["rawStreamAcquisition"])
 
-    spad_channels_hint = int(gui_cfg.get("spad_number_of_channels", gui_cfg.get("spad_channels", 25)))
+    spad_channels_hint = int(
+        gui_cfg.get("spad_number_of_channels", gui_cfg.get("spad_channels", 25))
+    )
     shape = (
         int(mcs_cfg["#pixels"]),
         int(mcs_cfg["#lines"]),
@@ -252,7 +256,9 @@ def _load_metadata(metadata_filename: Path):
         "snake_walk_xy": _as_bool(raw_cfg.get("snake_walk_xy", fpga_cfg.get("snake", False))),
         "snake_walk_z": _as_bool(raw_cfg.get("snake_walk_z", fpga_cfg.get("snake_z", False))),
         "dfd_activate": _as_bool(raw_cfg.get("dfd_activate", fpga_cfg.get("DFD_Activate", False))),
-        "clk_multiplier": int(raw_cfg.get("clk_multiplier", fpga_cfg.get("clk_multiplier", 1)) or 1),
+        "clk_multiplier": int(
+            raw_cfg.get("clk_multiplier", fpga_cfg.get("clk_multiplier", 1)) or 1
+        ),
         "dfd_shift": int(raw_cfg.get("dfd_shift", fpga_cfg.get("dfd_shift", 0)) or 0),
     }
 
@@ -271,7 +277,9 @@ def _convert_digital(
     clk_multiplier = max(1, meta["clk_multiplier"])
     reduced_timebins = effective_timebins // clk_multiplier
     words_per_sample = 2 if spad_channels == 25 else 8
-    converter = convertRawDataToCountsDirect if spad_channels == 25 else convertRawDataToCountsDirect49
+    converter = (
+        convertRawDataToCountsDirect if spad_channels == 25 else convertRawDataToCountsDirect49
+    )
 
     raw_words = np.memmap(raw_filename, dtype=np.uint64, mode="r")
     total_samples = raw_words.shape[0] // words_per_sample
@@ -286,7 +294,9 @@ def _convert_digital(
             h5file, "data_channels_extra", shape, reduced_timebins, 2, np.uint8
         )
 
-        frame_buffer = np.zeros((shape[1], shape[0], reduced_timebins, spad_channels), dtype=np.uint16)
+        frame_buffer = np.zeros(
+            (shape[1], shape[0], reduced_timebins, spad_channels), dtype=np.uint16
+        )
         frame_extra_buffer = np.zeros((shape[1], shape[0], reduced_timebins, 2), dtype=np.uint8)
         decode_buffer = np.zeros((chunk_samples, spad_channels + 2), dtype=np.uint64)
         buffer_sum = np.zeros(chunk_samples, dtype=np.uint64)
@@ -298,7 +308,9 @@ def _convert_digital(
         while sample_pointer < total_samples:
             current_frame_start = frame_index * samples_per_frame
             remaining_in_frame = current_frame_start + samples_per_frame - sample_pointer
-            process_samples = int(min(chunk_samples, total_samples - sample_pointer, remaining_in_frame))
+            process_samples = int(
+                min(chunk_samples, total_samples - sample_pointer, remaining_in_frame)
+            )
             process_words = process_samples * words_per_sample
             start_word = sample_pointer * words_per_sample
             stop_word = start_word + process_words
@@ -392,12 +404,14 @@ def _convert_analog(
         while sample_pointer < total_samples:
             current_frame_start = frame_index * samples_per_frame
             remaining_in_frame = current_frame_start + samples_per_frame - sample_pointer
-            process_samples = int(min(chunk_samples, total_samples - sample_pointer, remaining_in_frame))
+            process_samples = int(
+                min(chunk_samples, total_samples - sample_pointer, remaining_in_frame)
+            )
 
             # Analog conversion has the same writable-buffer requirement as the
             # digital path, so convert the read-only memmap slice to a plain array.
             chunk = np.array(
-                raw_words[sample_pointer: sample_pointer + process_samples],
+                raw_words[sample_pointer : sample_pointer + process_samples],
                 dtype=np.uint64,
                 copy=True,
             )
@@ -422,11 +436,11 @@ def _convert_analog(
 
             for analog_ch in range(2):
                 accumulate_unordered_sum_4d(
-                    frame_buffer[:, :, :, analog_ch: analog_ch + 1],
+                    frame_buffer[:, :, :, analog_ch : analog_ch + 1],
                     list_y,
                     list_x,
                     list_b,
-                    decoded[:, analog_ch: analog_ch + 1],
+                    decoded[:, analog_ch : analog_ch + 1],
                 )
 
             sample_pointer += process_samples
@@ -447,7 +461,9 @@ def _convert_analog(
                 frame_index += 1
 
 
-def convert_raw_acquisition(metadata_filename: Path, output_filename: Path | None = None, progress_callback=None):
+def convert_raw_acquisition(
+    metadata_filename: Path, output_filename: Path | None = None, progress_callback=None
+):
     """Rebuild a normal BrightEyes acquisition HDF5 from raw-stream acquisition files."""
     metadata_filename = Path(metadata_filename).resolve()
     meta = _load_metadata(metadata_filename)

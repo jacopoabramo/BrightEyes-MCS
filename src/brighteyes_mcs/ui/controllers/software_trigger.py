@@ -15,11 +15,22 @@ from ...storage.h5_schema import legacy_raw_stream_metadata
 
 class SoftwareTriggerController:
     GEOMETRY_WIDGET_NAMES = (
-        "spinBox_range_x", "spinBox_range_y", "spinBox_range_z", "checkBoxLockRatio",
-        "spinBox_off_x_um", "spinBox_off_y_um", "spinBox_off_z_um",
-        "spinBox_offExtra_x_V", "spinBox_offExtra_y_V", "spinBox_offExtra_z_V",
-        "spinBox_off_x2_um", "spinBox_off_y2_um", "spinBox_off_z2_um",
-        "spinBox_offExtra_x_V_2", "spinBox_offExtra_y_V_2", "spinBox_offExtra_z_V_2",
+        "spinBox_range_x",
+        "spinBox_range_y",
+        "spinBox_range_z",
+        "checkBoxLockRatio",
+        "spinBox_off_x_um",
+        "spinBox_off_y_um",
+        "spinBox_off_z_um",
+        "spinBox_offExtra_x_V",
+        "spinBox_offExtra_y_V",
+        "spinBox_offExtra_z_V",
+        "spinBox_off_x2_um",
+        "spinBox_off_y2_um",
+        "spinBox_off_z2_um",
+        "spinBox_offExtra_x_V_2",
+        "spinBox_offExtra_y_V_2",
+        "spinBox_offExtra_z_V_2",
     )
 
     def __init__(self, window):
@@ -54,8 +65,12 @@ class SoftwareTriggerController:
 
     @property
     def preview_geometry_editable(self):
-        return (self.active and self.session.preview and not self.stopping
-                and self.session.state == "armed")
+        return (
+            self.active
+            and self.session.preview
+            and not self.stopping
+            and self.session.state == "armed"
+        )
 
     def update_preview_geometry(self, registers):
         """Allow preview range/position changes, keeping acquisition geometry frozen."""
@@ -63,7 +78,7 @@ class SoftwareTriggerController:
             return {}
         allowed = {"axis_start_offset_volts", "axis_calibration_volts_per_step"}
         selectors = getattr(self.ui, "comboBox_AnalogOut", {})
-        for channel, selector in (selectors.items() if isinstance(selectors, dict) else ()):
+        for channel, selector in selectors.items() if isinstance(selectors, dict) else ():
             if selector.currentText() in ("X2", "Y2", "Z2"):
                 allowed.add(f"analog_output_{channel}_dc_volts")
         geometry = {key: value for key, value in registers.items() if key in allowed}
@@ -93,16 +108,21 @@ class SoftwareTriggerController:
         self.ui.checkBox_sw_trigger_enable.setEnabled(not self.active)
         self.ui.checkBox_sw_trigger_laser_off.setEnabled(self.selected() and not self.active)
         self.ui.pushButton_sw_trigger_cmd.setEnabled(
-            self.active and not self.stopping and self.session.state == "armed")
+            self.active and not self.stopping and self.session.state == "armed"
+        )
         if not self.active:
             self.label.setText("Start Preview or Acquisition to arm." if self.selected() else "")
         else:
             s = self.session
             count = str(s.completed) if s.preview else f"{s.completed}/{s.total}"
-            text = {"preparing": "Preparing acquisition",
-                    "armed": "Armed — waiting for software trigger",
-                    "capturing": "Capturing frame", "draining": "Receiving frame data",
-                    "complete": "Acquisition complete", "error": "Acquisition error"}[s.state]
+            text = {
+                "preparing": "Preparing acquisition",
+                "armed": "Armed — waiting for software trigger",
+                "capturing": "Capturing frame",
+                "draining": "Receiving frame data",
+                "complete": "Acquisition complete",
+                "error": "Acquisition error",
+            }[s.state]
             self.label.setText(f"{text}\nFrames completed: {count}")
 
     def validate(self):
@@ -112,11 +132,18 @@ class SoftwareTriggerController:
         reason = ""
         if model == DETECTOR_DISABLED or detector_uses_pispad23_timestamp(model):
             reason = "Software triggering requires a detector with frame data (SPAD or PISPAD23 intensity)."
-        elif any(widget.isChecked() for widget in (
-                self.ui.checkBox_ttmActivate, self.ui.checkBox_uttmActivate,
-                self.ui.checkBox_pispad23ttmActivate)):
+        elif any(
+            widget.isChecked()
+            for widget in (
+                self.ui.checkBox_ttmActivate,
+                self.ui.checkBox_uttmActivate,
+                self.ui.checkBox_pispad23ttmActivate,
+            )
+        ):
             reason = "Software triggering with external TTM recording is not supported yet."
-        elif not (self.ui.checkBox_fifo_digital.isChecked() or self.ui.checkBox_fifo_analog.isChecked()):
+        elif not (
+            self.ui.checkBox_fifo_digital.isChecked() or self.ui.checkBox_fifo_analog.isChecked()
+        ):
             reason = "Enable at least one data stream before using software triggering."
         if reason:
             QMessageBox.warning(self.window, "Software trigger", reason)
@@ -127,7 +154,8 @@ class SoftwareTriggerController:
             return
         manager = self.window.mcs_manager
         self.session = SoftwareTriggerSession(
-            manager, preview=preview, laser_off=self.ui.checkBox_sw_trigger_laser_off.isChecked())
+            manager, preview=preview, laser_off=self.ui.checkBox_sw_trigger_laser_off.isChecked()
+        )
         manager.software_trigger_session = self.session
         self.stopping = False
         # Hardware readback supplies defaults for controls not represented in
@@ -148,16 +176,31 @@ class SoftwareTriggerController:
 
     def _lock_settings(self):
         # Only preview range/position reopen between frames. Pixel counts stay fixed.
-        self.geometry_widgets = [(getattr(self.ui, name), getattr(self.ui, name).isEnabled())
-                                 for name in self.GEOMETRY_WIDGET_NAMES]
+        self.geometry_widgets = [
+            (getattr(self.ui, name), getattr(self.ui, name).isEnabled())
+            for name in self.GEOMETRY_WIDGET_NAMES
+        ]
         editable = ("preview_", "fingerprint_", "trace_", "fcs_", "plot_")
-        widgets = [item[2] for key, item in self.window.configuration_helper.items()
-                   if not key.startswith(editable)]
-        widgets += [getattr(self.ui, name) for name in (
-            "pushButton_loadCfg", "comboBox_detector_model", "checkBox_fifo_digital",
-            "checkBox_fifo_analog", "checkBox_DFD", "checkBox_pulsing_forced",
-            "checkBox_rawStreamAcquisition", "checkBox_ttmActivate", "checkBox_uttmActivate",
-            "checkBox_pispad23ttmActivate")]
+        widgets = [
+            item[2]
+            for key, item in self.window.configuration_helper.items()
+            if not key.startswith(editable)
+        ]
+        widgets += [
+            getattr(self.ui, name)
+            for name in (
+                "pushButton_loadCfg",
+                "comboBox_detector_model",
+                "checkBox_fifo_digital",
+                "checkBox_fifo_analog",
+                "checkBox_DFD",
+                "checkBox_pulsing_forced",
+                "checkBox_rawStreamAcquisition",
+                "checkBox_ttmActivate",
+                "checkBox_uttmActivate",
+                "checkBox_pispad23ttmActivate",
+            )
+        ]
         widgets += [widget for widget, _enabled in self.geometry_widgets]
         seen = set()
         for widget in widgets:
@@ -191,10 +234,14 @@ class SoftwareTriggerController:
             for name in ("receiver", "preprocess", "preview", "raw_writer"):
                 process = manager.process_supervisor.get(name)
                 if process is not None and process.exitcode is not None:
-                    expected_exit = (name in ("preview", "raw_writer") and
-                                     self.session.total == self.session.received_frames())
+                    expected_exit = (
+                        name in ("preview", "raw_writer")
+                        and self.session.total == self.session.received_frames()
+                    )
                     if process.exitcode != 0 or not expected_exit:
-                        raise RuntimeError(f"The {name} worker stopped during software-trigger acquisition.")
+                        raise RuntimeError(
+                            f"The {name} worker stopped during software-trigger acquisition."
+                        )
             self.update_controls()
         except Exception as error:
             self.fail(error)
@@ -237,20 +284,39 @@ class SoftwareTriggerController:
                         h5.metadata_add_dict("softwareTrigger", metadata)
                         group = h5.h5file["softwareTrigger"]
                         group.create_dataset("trigger_timestamps_unix", data=timestamps)
-                        h5.metadata_add_dict("configurationGUI_beforeStart",
-                            self.window._gui_config_for_h5(self.window.configurationGUI_dict_beforeStart))
-                        h5.metadata_add_dict("configurationFPGA", session.requested,
-                                             legacy_name_map=LEGACY_H5_REGISTER_NAME_MAP)
-                        h5.metadata_add_dict("configurationSpadFCSmanager", session.requested,
-                                             legacy_name_map=LEGACY_H5_REGISTER_NAME_MAP)
-                        h5.metadata_add_dict("configurationGUI",
-                            self.window._gui_config_for_h5(self.window.configurationGUI_dict_beforeStart))
+                        h5.metadata_add_dict(
+                            "configurationGUI_beforeStart",
+                            self.window._gui_config_for_h5(
+                                self.window.configurationGUI_dict_beforeStart
+                            ),
+                        )
+                        h5.metadata_add_dict(
+                            "configurationFPGA",
+                            session.requested,
+                            legacy_name_map=LEGACY_H5_REGISTER_NAME_MAP,
+                        )
+                        h5.metadata_add_dict(
+                            "configurationSpadFCSmanager",
+                            session.requested,
+                            legacy_name_map=LEGACY_H5_REGISTER_NAME_MAP,
+                        )
+                        h5.metadata_add_dict(
+                            "configurationGUI",
+                            self.window._gui_config_for_h5(
+                                self.window.configurationGUI_dict_beforeStart
+                            ),
+                        )
                         if manager.raw_stream_mode:
-                            h5.metadata_add_dict("rawStreamAcquisition", legacy_raw_stream_metadata(
-                                manager, spad_channels=self.window.spad_channels,
-                                clock_base_mhz=self.window.clock_base,
-                                raw_files=self.window.raw_stream_output_files,
-                                include_pispad23=session.needs_receiver_ready))
+                            h5.metadata_add_dict(
+                                "rawStreamAcquisition",
+                                legacy_raw_stream_metadata(
+                                    manager,
+                                    spad_channels=self.window.spad_channels,
+                                    clock_base_mhz=self.window.clock_base,
+                                    raw_files=self.window.raw_stream_output_files,
+                                    include_pispad23=session.needs_receiver_ready,
+                                ),
+                            )
                     finally:
                         h5.close()
         except Exception as error:

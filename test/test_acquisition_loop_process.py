@@ -18,7 +18,7 @@ class TestAcquirePreviewAggregation(unittest.TestCase):
         list_x, list_y, list_z, list_rep, grouped = aggregate_samples_by_pixel(
             pointer_start=2,
             gap=values.shape[0],
-            timebinsPerPixel=timebins_per_pixel,
+            timebins_per_pixel=timebins_per_pixel,
             shape=shape,
             values=values,
             frame_lookup=frame_lookup,
@@ -50,7 +50,7 @@ class TestAcquirePreviewAggregation(unittest.TestCase):
         list_x, list_y, list_z, _, grouped = aggregate_samples_by_pixel(
             pointer_start=0,
             gap=values.shape[0],
-            timebinsPerPixel=timebins_per_pixel,
+            timebins_per_pixel=timebins_per_pixel,
             shape=shape,
             values=values,
             frame_lookup=frame_lookup,

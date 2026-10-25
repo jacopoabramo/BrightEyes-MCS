@@ -21,7 +21,7 @@ Code path:
 - MainWindow.timerPreviewImg_tick(...)
 
 What is fitted:
-- The GUI gets the DFD trace from getDfdTrace().
+- The GUI gets the DFD trace from get_dfd_trace().
 - trace_sum = dfd_trace[2, :] is the cumulative photon-arrival histogram.
 - This is the curve shown in gray on the DFD trace widget.
 - The white curve is the live trace, rescaled to the same vertical range.
@@ -91,7 +91,7 @@ How the fitted curve is drawn:
 
 - The x values are moved back to the original cyclic position:
   x_fit_bins_plot    = mod(x_fit_bins + peak_idx, nbins)
-  x_fit_seconds_plot = mod(x_fit_seconds + peak_idx * bin_width, T_cycle)
+  x_fit_seconds_plot = mod(x_fit_seconds + peak_idx * bin_width, cycle_period)
 
 - These points are plotted as yellow markers on top of the DFD trace.
 
@@ -135,7 +135,7 @@ the worker process does the following:
 - It splits the time axis into 3 parts:
 
   tparts = 3
-  tbins = timebinsPerPixel / clk_multiplier
+  tbins = timebins_per_pixel / clk_multiplier
   gbins = tbins // 3
 
 - Then each photon sample is accumulated into one of 3 coarse bins:
@@ -283,7 +283,7 @@ It stores a 3-plane floating array called image_xy_hcl:
 - C plane = quality
 - L plane = brightness (raw summed counts)
 
-This is why getPreviewHclImage() returns a 3-channel float image, not the final
+This is why get_preview_hcl_image() returns a 3-channel float image, not the final
 displayed colors.
 
 
@@ -318,7 +318,7 @@ The "A" button computes an automatic correction from:
 
 It updates:
 
-  delta_tau <- delta_tau + current_mean_ns - tau_fit_ns   (mod T_cycle)
+  delta_tau <- delta_tau + current_mean_ns - tau_fit_ns   (mod cycle_period)
 
 So the image mean is aligned to the trace-fit lifetime.
 

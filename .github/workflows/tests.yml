@@ -36,6 +36,8 @@ jobs:
         run: |
           uv run python scripts/check_docs.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run ruff format --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           uv run python scripts/check_lint.py
       - name: Check the types of the baseline tests
         if: matrix.python-version == '3.12'

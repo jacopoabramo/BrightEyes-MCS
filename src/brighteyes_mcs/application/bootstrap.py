@@ -11,7 +11,12 @@ import sys
 
 def _add_logging_argument(parser):
     parser.add_argument(
-        "--log-level", "--verbosity", dest="log_level", type=int, choices=range(4), default=2,
+        "--log-level",
+        "--verbosity",
+        dest="log_level",
+        type=int,
+        choices=range(4),
+        default=2,
         help="log verbosity: 0=off, 1=normal, 2=user actions (default), 3=data-flow debug",
     )
 

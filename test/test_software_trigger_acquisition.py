@@ -39,10 +39,10 @@ def test_separate_triggers_share_workers_and_one_output(tmp_path, preview, raw, 
     manager.quick_reset_fpga = MagicMock()
     manager.check_fpga_alive = MagicMock(return_value=0)
     manager.set_spad_channels(channels)
-    manager.set_DFD_nbins(81)
+    manager.set_dfd_nbins(81)
     manager.set_preview_buffer_capacity_samples(64)
-    manager.setActivatedFifo(["stream_out_main", "stream_out_aux"])
-    manager.activateShowPreview(True)
+    manager.set_activated_fifo(["stream_out_main", "stream_out_aux"])
+    manager.set_show_preview(True)
     manager.shared_dict.update(channel="Sum", activate_autocorrelation=False, activate_trace=False)
     manager.set_filename_h5(str(tmp_path / "triggered.h5"))
     manager.set_do_not_save(preview)
@@ -61,14 +61,14 @@ def test_separate_triggers_share_workers_and_one_output(tmp_path, preview, raw, 
             manager.run()
         wait_until(lambda: manager.shared_dict.get("software_trigger_worker_ready"), manager)
         session.arm()
-        worker = manager.raw_writer_process if raw else manager.previewProcess
+        worker = manager.raw_writer_process if raw else manager.preview_process
         pid = worker.pid
         frame_count = 5 if preview else 4
         for frame in range(frame_count):
             assert session.trigger()
             assert not session.trigger()
             for fifo in manager.activated_fifos_list:
-                size = manager.getExpectedFifoElementsPerFrame(fifo)
+                size = manager.get_expected_fifo_elements_per_frame(fifo)
                 packet = np.full(size, frame + 1 if raw else 0, dtype=np.uint64)
                 packets[fifo].append(packet)
                 if raw:
@@ -103,7 +103,7 @@ def test_separate_triggers_share_workers_and_one_output(tmp_path, preview, raw, 
                     assert output["data"].shape == (2, 2, 2, 2, 2, channels)
                     assert output["data_analog"].shape == (2, 2, 2, 2, 2, 2)
     finally:
-        manager.stopPreview()
-        manager.stopAcquisition()
+        manager.stop_preview()
+        manager.stop_acquisition()
         incoming.close()
         manager.mp_manager.shutdown()

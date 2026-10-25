@@ -9,7 +9,14 @@ from .settings import AcquisitionConfig, DetectorConfig, OutputConfig, ScanGeome
 from .state import AcquisitionState
 
 __all__ = [
-    "AcquisitionCoordinator", "AcquisitionStorage", "PreviewRepository",
-    "ProcessSupervisor", "SharedMemoryRegistry", "AcquisitionConfig",
-    "AcquisitionState", "DetectorConfig", "OutputConfig", "ScanGeometry",
+    "AcquisitionCoordinator",
+    "AcquisitionStorage",
+    "PreviewRepository",
+    "ProcessSupervisor",
+    "SharedMemoryRegistry",
+    "AcquisitionConfig",
+    "AcquisitionState",
+    "DetectorConfig",
+    "OutputConfig",
+    "ScanGeometry",
 ]

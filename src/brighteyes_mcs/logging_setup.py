@@ -33,9 +33,12 @@ def report_logging_failure(context, error):
         if context in _reported_failures:
             return
         _reported_failures.add(context)
-        print(f"BrightEyes-MCS logging failure ({context}): {error}. "
-              "The application will continue without this diagnostic.",
-              file=sys.stderr, flush=True)
+        print(
+            f"BrightEyes-MCS logging failure ({context}): {error}. "
+            "The application will continue without this diagnostic.",
+            file=sys.stderr,
+            flush=True,
+        )
     except Exception:
         pass  # Even stderr may be missing, closed or out of disk space.
 
@@ -64,6 +67,7 @@ class ResilientLogger(logging.LoggerAdapter):
 
 class ResilientFileHandler(logging.FileHandler):
     """Share one append-only file while keeping sink failures out of app code."""
+
     _failed = False
 
     def __init__(self, filename, encoding="utf-8"):
@@ -84,8 +88,10 @@ class ResilientFileHandler(logging.FileHandler):
             # under the lock. StreamHandler's thread lock still applies too.
             message = self.format(record)
             if not self._process_lock.acquire():
-                report_logging_failure("shared log busy", TimeoutError(
-                    "Skipped a record after waiting 100 ms for another writer"))
+                report_logging_failure(
+                    "shared log busy",
+                    TimeoutError("Skipped a record after waiting 100 ms for another writer"),
+                )
                 return
             try:
                 self.stream.write(message + self.terminator)
@@ -117,7 +123,7 @@ class ResilientFileHandler(logging.FileHandler):
             report_logging_failure("file handler", error)
             return False
 
-    def handleError(self, record):
+    def handleError(self, record):  # noqa: N802
         error = sys.exc_info()[1]
         if isinstance(error, OSError):
             self._failed = True
@@ -181,8 +187,12 @@ def default_log_dir() -> Path:
     return Path.cwd() / "log"
 
 
-def configure_logging(*, verbosity: int | None = None, debug_enabled: bool | None = None,
-                      log_dir: str | Path | None = None) -> Path | None:
+def configure_logging(
+    *,
+    verbosity: int | None = None,
+    debug_enabled: bool | None = None,
+    log_dir: str | Path | None = None,
+) -> Path | None:
     """Try to configure logging; unavailable diagnostics must not block startup."""
     try:
         return _configure_logging(verbosity=verbosity, debug_enabled=debug_enabled, log_dir=log_dir)
@@ -198,15 +208,19 @@ def _configure_logging(*, verbosity=None, debug_enabled=None, log_dir=None):
     Level zero creates neither a directory nor a file.
     """
     global _fault_file
-    selected = (int(os.environ.get(VERBOSITY_ENV_VAR, DEFAULT_VERBOSITY))
-                if verbosity is None else verbosity)
+    selected = (
+        int(os.environ.get(VERBOSITY_ENV_VAR, DEFAULT_VERBOSITY))
+        if verbosity is None
+        else verbosity
+    )
     if debug_enabled is not None and verbosity is None:
         selected = 3 if debug_enabled else 1
     if selected not in (0, 1, 2, 3):
         raise ValueError("Log verbosity must be 0, 1, 2 or 3")
     os.environ[VERBOSITY_ENV_VAR] = str(selected)
-    logger.setLevel({0: logging.CRITICAL + 1, 1: logging.INFO,
-                     2: ACTION_LEVEL, 3: logging.DEBUG}[selected])
+    logger.setLevel(
+        {0: logging.CRITICAL + 1, 1: logging.INFO, 2: ACTION_LEVEL, 3: logging.DEBUG}[selected]
+    )
     logger.propagate = False
     destination = Path(log_dir) if log_dir is not None else default_log_dir()
     destination = destination.resolve()
@@ -232,10 +246,14 @@ def _configure_logging(*, verbosity=None, debug_enabled=None, log_dir=None):
     handler = ResilientFileHandler(log_file, encoding="utf-8")
     handler._brighteyes_handler = True
     handler.addFilter(SessionFilter())
-    handler.setFormatter(logging.Formatter(
-        "%(asctime)s.%(msecs)03d %(levelname)s pid=%(process)d "
-        "process=%(processName)s thread=%(threadName)s action=%(action)s "
-        "%(pathname)s:%(lineno)d %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s.%(msecs)03d %(levelname)s pid=%(process)d "
+            "process=%(processName)s thread=%(threadName)s action=%(action)s "
+            "%(pathname)s:%(lineno)d %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    )
     logger.addHandler(handler)
     # Keep the descriptor alive for native faults, including crashes in extensions.
     try:
@@ -251,8 +269,13 @@ def _configure_logging(*, verbosity=None, debug_enabled=None, log_dir=None):
             except Exception:
                 pass
             _fault_file = None
-    safe_log(logging.INFO, "Logging started verbosity=%s session=%s python=%s", selected,
-             _session_timestamp(), sys.version.split()[0])
+    safe_log(
+        logging.INFO,
+        "Logging started verbosity=%s session=%s python=%s",
+        selected,
+        _session_timestamp(),
+        sys.version.split()[0],
+    )
     return log_file
 
 
@@ -273,9 +296,15 @@ def _signature_wrapper(function, dispatch):
     original = signature(function)
     parameters = list(original.parameters.values())
     declaration = original.replace(
-        parameters=[parameter.replace(annotation=Parameter.empty,
-                    default=None if parameter.default is not Parameter.empty else Parameter.empty)
-                    for parameter in parameters], return_annotation=Parameter.empty)
+        parameters=[
+            parameter.replace(
+                annotation=Parameter.empty,
+                default=None if parameter.default is not Parameter.empty else Parameter.empty,
+            )
+            for parameter in parameters
+        ],
+        return_annotation=Parameter.empty,
+    )
     forwarding = []
     for parameter in parameters:
         name = parameter.name
@@ -291,8 +320,7 @@ def _signature_wrapper(function, dispatch):
     while dispatch_name in original.parameters:
         dispatch_name += "_"
     namespace = {dispatch_name: dispatch}
-    source = (f"def wrapper{declaration}:\n"
-              f"    return {dispatch_name}({', '.join(forwarding)})\n")
+    source = f"def wrapper{declaration}:\n    return {dispatch_name}({', '.join(forwarding)})\n"
     exec(compile(source, f"<trace_action {function.__qualname__}>", "exec"), namespace)
     wrapper = namespace["wrapper"]
     wrapper.__defaults__ = function.__defaults__
@@ -318,14 +346,30 @@ def trace_action(function):
                 except RuntimeError:
                     pass  # A Qt object may already be tearing down.
                 # Do not copy images or arbitrary widget representations into logs.
-                values = [value if isinstance(value, (int, float, bool, type(None)))
-                          else value[:256] if isinstance(value, str) else type(value).__name__
-                          for value in args[1:]]
-                options = {key: value if isinstance(value, (int, float, bool, type(None)))
-                           else value[:256] if isinstance(value, str) else type(value).__name__
-                           for key, value in kwargs.items()}
-                safe_log(ACTION_LEVEL, "ACTION_BEGIN first_call=%s source=%s args=%r kwargs=%r",
-                         function.__qualname__, source, values, options)
+                values = [
+                    value
+                    if isinstance(value, (int, float, bool, type(None)))
+                    else value[:256]
+                    if isinstance(value, str)
+                    else type(value).__name__
+                    for value in args[1:]
+                ]
+                options = {
+                    key: value
+                    if isinstance(value, (int, float, bool, type(None)))
+                    else value[:256]
+                    if isinstance(value, str)
+                    else type(value).__name__
+                    for key, value in kwargs.items()
+                }
+                safe_log(
+                    ACTION_LEVEL,
+                    "ACTION_BEGIN first_call=%s source=%s args=%r kwargs=%r",
+                    function.__qualname__,
+                    source,
+                    values,
+                    options,
+                )
         except Exception as error:
             report_logging_failure("action metadata", error)
 
@@ -335,8 +379,12 @@ def trace_action(function):
             result = function(*args, **kwargs)
         except BaseException:
             if token is not None:
-                safe_log(logging.ERROR, "ACTION_FAILED first_call=%s", function.__qualname__,
-                         exc_info=True)
+                safe_log(
+                    logging.ERROR,
+                    "ACTION_FAILED first_call=%s",
+                    function.__qualname__,
+                    exc_info=True,
+                )
             raise
         else:
             if token is not None:
@@ -348,6 +396,7 @@ def trace_action(function):
                     _action.reset(token)
                 except Exception as error:
                     report_logging_failure("action context cleanup", error)
+
     try:
         return _signature_wrapper(function, traced)
     except Exception as error:
@@ -357,6 +406,7 @@ def trace_action(function):
 
 def logged_worker(function):
     """Initialize logging inside spawned processes and preserve fatal tracebacks."""
+
     @wraps(function)
     def run(*args, **kwargs):
         restore_exceptions = None
@@ -379,6 +429,7 @@ def logged_worker(function):
                     restore_exceptions()
                 except Exception as error:
                     report_logging_failure("worker diagnostics cleanup", error)
+
     return run
 
 
@@ -387,16 +438,23 @@ def install_exception_logging():
     original_sys, original_thread = sys.excepthook, threading.excepthook
 
     def application_error(kind, error, traceback):
-        safe_log(logging.CRITICAL, "Unhandled application exception", exc_info=(kind, error, traceback))
+        safe_log(
+            logging.CRITICAL, "Unhandled application exception", exc_info=(kind, error, traceback)
+        )
         original_sys(kind, error, traceback)
 
     def thread_error(args):
-        safe_log(logging.CRITICAL, "Unhandled thread exception: %s", args.thread.name,
-                 exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+        safe_log(
+            logging.CRITICAL,
+            "Unhandled thread exception: %s",
+            args.thread.name,
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
         original_thread(args)
 
     sys.excepthook, threading.excepthook = application_error, thread_error
 
     def restore():
         sys.excepthook, threading.excepthook = original_sys, original_thread
+
     return restore

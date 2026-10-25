@@ -39,8 +39,8 @@ pxsize_x = range_x / nx
 pxsize_y = range_y / ny
 
 
-calib_Vx = calib_x / pxsize_x  # px/V
-calib_Vy = calib_y / pxsize_y  # px/V
+calib_vx = calib_x / pxsize_x  # px/V
+calib_vy = calib_y / pxsize_y  # px/V
 
 img = np.sum(data["data"], axis=(0, 1, 4, 5))
 
@@ -54,9 +54,9 @@ img_pad = np.pad(img, pad_width)
 
 f_ax = ft.fftshift(ft.fftfreq(pad_width + nx))
 
-imgF = ft.fftshift(ft.fft2(img_pad))
+img_spectrum = ft.fftshift(ft.fft2(img_pad))
 
-F = np.abs(imgF)
+F = np.abs(img_spectrum)
 
 idx_max = np.unravel_index(np.argmax(F), np.array(F).shape)
 
@@ -95,8 +95,8 @@ px_x = T / X
 px_y = T / Y
 
 
-c_x = calib_Vx * px_x
-c_y = calib_Vy * px_y
+c_x = calib_vx * px_x
+c_y = calib_vy * px_y
 
 print("c_x", c_x)
 print("c_y", c_y)

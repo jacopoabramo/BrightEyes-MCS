@@ -94,8 +94,22 @@ line-length = 100
 exclude = ["src/brighteyes_mcs/ui/qt/*_design.py", "src/brighteyes_mcs/plugins/**/*_design.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B"]
+select = ["E", "F", "W", "B", "N"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/brighteyes_mcs/ui/qt/**" = ["N"]
+"src/brighteyes_mcs/plugins/**" = ["N"]
+"test/**" = ["N"]
+
+[tool.ruff.format]
+exclude = [
+    "src/brighteyes_mcs/ui/qt/**",
+    "src/brighteyes_mcs/plugins/**",
+    "test/**",
+    "scripts/**",
+    "blueskyproject_mcs/**",
+]
 
 [tool.mypy]
 python_version = "3.11"

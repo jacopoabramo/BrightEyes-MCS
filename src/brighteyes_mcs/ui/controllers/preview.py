@@ -5,11 +5,11 @@ class PreviewController:
     @staticmethod
     def image(manager, fallback, projection="xy", rgb=False):
         if manager.shared_arrays_ready:
-            return manager.getPreviewImage(projection, rgb)
+            return manager.get_preview_image(projection, rgb)
         return fallback
 
     @staticmethod
     def flat_data(manager, active_file):
         if active_file:
             return None
-        return manager.getPreviewFlatData()
+        return manager.get_preview_flat_data()

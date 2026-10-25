@@ -26,7 +26,7 @@ class H5Manager:
         self.h5dset = {}
         logger.debug("%s %s", "Filename:", filenameh5)
 
-    def init_dataset(self, dataset_name, shape, timebinsPerPixel, channels, dtype):
+    def init_dataset(self, dataset_name, shape, timebins_per_pixel, channels, dtype):
         logger.debug("init_dataset")
         self.h5dset[dataset_name] = self.h5file.create_dataset(
             dataset_name,
@@ -35,7 +35,7 @@ class H5Manager:
                 shape[2],
                 shape[1],
                 shape[0],
-                timebinsPerPixel,
+                timebins_per_pixel,
                 channels,
             ),
             maxshape=(
@@ -43,7 +43,7 @@ class H5Manager:
                 shape[2],
                 shape[1],
                 shape[0],
-                timebinsPerPixel,
+                timebins_per_pixel,
                 channels,
             ),
             dtype=dtype,
@@ -92,11 +92,11 @@ class H5Manager:
         else:
             group_conf = self.h5file[group_name]
 
-        meta_data_h5_debug=""
+        meta_data_h5_debug = ""
         for i in mydict.keys():
             value_i = mydict[i]
             if value_i is not None:
-                meta_data_h5_debug+="%s (%s): %s     "  %(i, type(value_i), value_i)
+                meta_data_h5_debug += "%s (%s): %s     " % (i, type(value_i), value_i)
                 if isinstance(value_i, list):
                     fff = np.asarray(mydict[i], dtype=np.float64)
                     logger.debug("%s %s", fff, type(fff))
@@ -108,6 +108,7 @@ class H5Manager:
                 else:
                     group_conf.attrs[i] = mydict[i]
         logger.debug("%s %s", "Metadata h5 added at %s: " % group_name, meta_data_h5_debug)
+
     def metadata_add_initial(self, comment):
         logger.debug("metadata_add_initial")
         self.h5file.attrs["default"] = "data"
@@ -177,7 +178,7 @@ class H5ManagerProcess(mp.Process):
                     h5mgr.init_dataset(
                         kwargs["dataset_name"],
                         kwargs["shape"],
-                        kwargs["timebinsPerPixel"],
+                        kwargs["timebins_per_pixel"],
                         kwargs["channels"],
                         kwargs["dtype"],
                     )
@@ -265,13 +266,13 @@ class H5ManagerProcessClient:
     def init(self, filenameh5, new_file=True):
         self._send("init", wait=True, filenameh5=filenameh5, new_file=new_file)
 
-    def init_dataset(self, dataset_name, shape, timebinsPerPixel, channels, dtype):
+    def init_dataset(self, dataset_name, shape, timebins_per_pixel, channels, dtype):
         self._send(
             "init_dataset",
             wait=True,
             dataset_name=dataset_name,
             shape=shape,
-            timebinsPerPixel=timebinsPerPixel,
+            timebins_per_pixel=timebins_per_pixel,
             channels=channels,
             dtype=dtype,
         )
@@ -294,4 +295,3 @@ class H5ManagerProcessClient:
 
     def shutdown(self):
         self._send("shutdown", wait=True)
-

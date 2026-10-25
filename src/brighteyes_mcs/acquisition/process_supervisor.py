@@ -27,8 +27,13 @@ class ProcessSupervisor:
             if process is not None and not alive:
                 code = getattr(process, "exitcode", None)
                 if isinstance(code, int) and code != 0 and name not in self._reported_exits:
-                    logger.error("Worker exited unexpectedly name=%s pid=%s code=%s hex=0x%08X",
-                                 name, getattr(process, "pid", None), code, code & 0xFFFFFFFF)
+                    logger.error(
+                        "Worker exited unexpectedly name=%s pid=%s code=%s hex=0x%08X",
+                        name,
+                        getattr(process, "pid", None),
+                        code,
+                        code & 0xFFFFFFFF,
+                    )
                     self._reported_exits.add(name)
             return alive
         except Exception:
@@ -50,12 +55,20 @@ class ProcessSupervisor:
                 stop()
         process.join(timeout=timeout)
         if process.is_alive():
-            logger.warning("Worker stop timed out; terminating name=%s pid=%s timeout=%s",
-                           name, getattr(process, "pid", None), timeout)
+            logger.warning(
+                "Worker stop timed out; terminating name=%s pid=%s timeout=%s",
+                name,
+                getattr(process, "pid", None),
+                timeout,
+            )
             process.terminate()
             process.join(timeout=2)
-        logger.info("Worker stopped name=%s pid=%s exitcode=%s", name,
-                    getattr(process, "pid", None), getattr(process, "exitcode", None))
+        logger.info(
+            "Worker stopped name=%s pid=%s exitcode=%s",
+            name,
+            getattr(process, "pid", None),
+            getattr(process, "exitcode", None),
+        )
 
     def clear(self) -> None:
         self._processes.clear()

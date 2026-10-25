@@ -18,16 +18,24 @@ class PISPAD23MicroimagePipeline(DisabledDetectorPipeline):
     def make_acquisition_loop(self, acquisition, do_not_save):
         saving = None
         if not do_not_save:
-            saving = dict(filename=acquisition.filenameh5, frames=acquisition.dim_z,
-                          repetitions=acquisition.dim_rep,
-                          dwell_seconds=acquisition.time_resolution * acquisition.timebins_per_pixel
-                          * acquisition.circ_points * acquisition.circ_repetition * 1e-6,
-                          snake_z=acquisition.shared_dict.get("snake_walk_z", False))
+            saving = dict(
+                filename=acquisition.filenameh5,
+                frames=acquisition.dim_z,
+                repetitions=acquisition.dim_rep,
+                dwell_seconds=acquisition.time_resolution
+                * acquisition.timebins_per_pixel
+                * acquisition.circ_points
+                * acquisition.circ_repetition
+                * 1e-6,
+                snake_z=acquisition.shared_dict.get("snake_walk_z", False),
+            )
         self.worker = MicroimageWorker(
-            acquisition.dim_x, acquisition.dim_y,
+            acquisition.dim_x,
+            acquisition.dim_y,
             getattr(acquisition, "pispad23_stream_port", 19000),
             getattr(acquisition, "pispad23_batch_size", 4096),
-            acquisition.shared_objects, acquisition.shared_dict,
+            acquisition.shared_objects,
+            acquisition.shared_dict,
             snake=acquisition.shared_dict.get("snake_walk_xy", False),
             saving=saving,
         )
