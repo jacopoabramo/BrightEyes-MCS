@@ -139,17 +139,17 @@ def test_fpga_handle_propagates_worker_initialization_error():
     process_type.return_value.start.assert_called_once_with()
 
 
-def test_run_command_is_pulsed():
-    """Pulse the run command, because the session stays open between runs."""
+def test_run_command_updates_register_copy() -> None:
+    """Send the run command through the manager and keep what it set in the window's copy."""
     window = MainWindow.__new__(MainWindow)
-    window.setRegistersDict = MagicMock()
+    window.configurationFPGA_dict = {"start_command": True}
+    window.mcs_manager = MagicMock()
+    window.mcs_manager.start.return_value = {"stop_command": False, "start_command": False}
 
     window.sendCmdRun()
 
-    assert window.setRegistersDict.call_args_list == [
-        call({"stop_command": False, "start_command": True}),
-        call({"start_command": False}),
-    ]
+    window.mcs_manager.start.assert_called_once_with()
+    assert window.configurationFPGA_dict == {"stop_command": False, "start_command": False}
 
 
 def connected_window():

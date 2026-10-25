@@ -3,6 +3,7 @@
 import copy
 import dataclasses
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -212,11 +213,15 @@ COLLABORATORS = (
 )
 
 
-def make_window(writes):
-    """Return a window over fake widgets that records each register write in `writes`."""
+def make_window(writes: list[dict[str, Any]], manager: McsManager | None = None) -> MainWindow:
+    """Return a window over fake widgets that records each register write in `writes`.
+
+    Given a manager, the window writes through it as in production and
+    `writes` is left to the caller.
+    """
     window = MainWindow.__new__(MainWindow)
     window.ui = FakeUi(make_widgets())
-    window.mcs_manager = MagicMock()
+    window.mcs_manager = MagicMock() if manager is None else manager
     window.configurationFPGA_dict = {}
     window.clock_base = 40
     window.spad_channels = 25
@@ -228,15 +233,35 @@ def make_window(writes):
     window.defineMetadataFilename = MagicMock(return_value="C:/data/run_only_metadata.h5")
     window.ttm_remote_is_up = MagicMock(return_value=False)
     window._current_detector_model = MagicMock(return_value="SPAD Array")
-    window.setRegistersDict = lambda registers: writes.append(copy.deepcopy(registers))
+    if manager is None:
+        window.setRegistersDict = lambda registers: writes.append(copy.deepcopy(registers))
     return window
 
 
-def record_start_writes():
+def record_start(do_run: bool = True) -> tuple[list[dict[str, Any]], McsManager]:
+    """Return the register writes of a start and the manager that received them."""
+    writes: list[dict[str, Any]] = []
+    manager = McsManager()
+    manager.is_connected = True
+    manager.fpga_handle = MagicMock()
+    manager.run = MagicMock()
+    manager.shared_arrays_ready = True
+    manager.set_fingerprint_mask = MagicMock()
+    write = manager.set_registers_dict
+
+    def record(registers: Mapping[str, Any]) -> None:
+        writes.append(copy.deepcopy(dict(registers)))
+        write(registers)
+
+    manager.set_registers_dict = record
+    window = make_window(writes, manager=manager)
+    window.initializeAcquisition(do_not_save=True, do_run=do_run)
+    return writes, manager
+
+
+def record_start_writes() -> list[dict[str, Any]]:
     """Return the register dictionaries the start sequence writes, in order."""
-    writes = []
-    make_window(writes).initializeAcquisition(do_not_save=True, do_run=True)
-    return writes
+    return record_start()[0]
 
 
 LIVE_SLOTS = {
@@ -325,17 +350,28 @@ def test_harness_rejects_a_changed_value_type() -> None:
 
 
 def record_start_settings() -> dict[str, Any]:
-    """Return the last arguments of each manager setter the start sequence calls."""
-    window = make_window([])
-    window.initializeAcquisition(do_not_save=True, do_run=True)
-    manager = window.mcs_manager
+    """Return the settings a start leaves in the manager, under the setter that sets each."""
+    _, manager = record_start()
     settings = {
-        name: [*args, *kwargs.values()]
-        for name, args, kwargs in manager.method_calls
-        if name.startswith("set_")
+        "set_spad_channels": [manager.spad_channels],
+        "set_dfd_enable": [manager.dfd_enable],
+        "set_dfd_nbins": [manager.dfd_nbins],
+        "set_activate_snake_walk_xy": [manager.snake_walk_xy],
+        "set_activate_snake_walk_z": [manager.snake_walk_z],
+        "set_compensation_delay_for_snake": [manager.compensation_delay_for_snake],
+        "set_activated_fifo": [manager.activated_fifos_list],
+        "set_show_preview": [manager.activate_show_preview],
+        "set_do_not_save": [manager.do_not_save_event.is_set()],
+        "set_raw_stream_mode": [manager.raw_stream_mode],
+        "set_filename_h5": [manager.filenameh5],
+        "set_autocorrelation_maxx": [manager.autocorrelation_maxx],
+        "set_trace_bins": [manager.trace_bins],
+        "set_trace_sample_per_bins": [manager.trace_sample_per_bins],
+        "set_clk_multiplier": [manager.clk_multiplier],
+        "set_fingerprint_mask": list(manager.set_fingerprint_mask.call_args.args),
+        "pispad23_stream_port": manager.pispad23_stream_port,
+        "pispad23_batch_size": manager.pispad23_batch_size,
     }
-    settings["pispad23_stream_port"] = manager.pispad23_stream_port
-    settings["pispad23_batch_size"] = manager.pispad23_batch_size
     return to_json(settings)
 
 
@@ -445,3 +481,9 @@ def test_start_pulses_run_command(manager: McsManager) -> None:
         ("start_command", True),
         ("start_command", False),
     ]
+
+
+def test_test_mode_start_writes_no_streams() -> None:
+    """Write neither stream enables nor the start command in the test-mode start."""
+    writes, _ = record_start(do_run=False)
+    assert_same_writes(writes, BASELINE["start"][:7])
