@@ -2,7 +2,7 @@
 
 The 151 documented registers require an estimated **822 bytes** when each element uses a whole-byte container. Their combined logical width is **4751 bits**, equivalent to **594 bytes** if all bits are packed together.
 
-Source: [register definitions](BrightEyes-MCSLL-registers.md). Fixed-point widths and array lengths use the local reference firmware `src/brighteyes_mcs/bitfiles/MCSV2-USB7856R-3_3V-40M91.lvbitx`. The four `L1` through `L4` registers use the documented U8 type because those names are absent from that bitfile.
+Source: [register definitions](BrightEyes-MCSLL-registers.md). Fixed-point widths and array lengths use the reference firmware `MCSV2-USB7856R-3_3V-40M91.lvbitx`, which is not distributed with the repository and is placed locally in `src/brighteyes_mcs/bitfiles/`. The four `L1` through `L4` registers use the documented U8 type because those names are absent from that bitfile.
 
 ## Sizing assumptions
 

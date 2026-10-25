@@ -1,0 +1,69 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  windows-tests:
+    name: Windows / Python ${{ matrix.python-version }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install application and test dependencies
+        run: uv sync --locked
+      - name: Run core and Qt-safe tests
+        run: uv run pytest -q
+      - name: Run Qt isolation tests
+        if: matrix.python-version == '3.13'
+        run: uv run python -m unittest test.test_channel_delay_skew_plugin -v
+      - name: Run real console isolation tests
+        if: matrix.python-version == '3.13'
+        run: uv run pytest -q -m qt_isolated test/test_console_widget.py
+      - name: Compile package
+        run: uv run python -m compileall -q src scripts
+      - name: Check documentation and lint baseline
+        if: matrix.python-version == '3.12'
+        run: |
+          uv run python scripts/check_docs.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          uv run python scripts/check_lint.py
+      - name: Check the types of the baseline tests
+        if: matrix.python-version == '3.12'
+        run: >-
+          uv run mypy --disallow-untyped-defs --disallow-incomplete-defs --follow-imports=silent
+          test/conftest.py test/acquisition_harness.py test/test_acquisition_loop_baseline.py
+          test/test_raw_conversion_baseline.py test/test_pispad23_emulator.py
+          test/test_pointer_decoding.py test/test_spad_words.py test/test_h5_manager.py
+          test/test_lifetime_baseline.py
+
+  external-links:
+    name: External documentation links (advisory)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.12"
+      - name: Report external link failures
+        run: uv run --no-project python scripts/check_docs.py --external
+
+  tests-passed:
+    name: Tests passed
+    if: always()
+    needs: [windows-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail when a test job did not succeed
+        if: needs.windows-tests.result != 'success'
+        run: exit 1
