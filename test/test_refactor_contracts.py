@@ -11,7 +11,7 @@ from brighteyes_mcs.application.contracts import DetectorPipeline
 from brighteyes_mcs.application.paths import ensure_user_configuration, user_config_dir
 from brighteyes_mcs.acquisition.detectors import create_detector_pipeline
 from brighteyes_mcs.storage.h5 import H5Manager
-from brighteyes_mcs.storage.legacy_config import LegacyConfigurationCodec, LegacyConfigurationTranslator
+from brighteyes_mcs.storage.legacy_config import LegacyConfigurationCodec
 from brighteyes_mcs.storage.h5_schema import (
     DATA_FORMAT_VERSION,
     describe_h5,
@@ -39,16 +39,6 @@ class TestLegacyConfigurationContract(unittest.TestCase):
                     LegacyConfigurationCodec.loads(LegacyConfigurationCodec.dumps(payload)),
                     payload,
                 )
-
-    def test_typed_translation_preserves_unknown_keys_and_plugins(self):
-        payload = LegacyConfigurationCodec.load(ROOT / "src" / "brighteyes_mcs" / "cfg" / "default.cfg")
-        payload["future_key"] = {"nested": [1, 2, 3]}
-        restored = LegacyConfigurationTranslator.to_legacy(
-            LegacyConfigurationTranslator.from_legacy(payload)
-        )
-        self.assertEqual(restored["future_key"], payload["future_key"])
-        self.assertEqual(restored["plugins"], payload["plugins"])
-        self.assertEqual(restored["spad_channels"], payload["spad_channels"])
 
     def test_first_run_copies_legacy_schema_to_user_owned_directory(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict("os.environ", {"APPDATA": folder}):

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
-from ...storage.legacy_config import LegacyConfigurationCodec, LegacyConfigurationTranslator
+from ...storage.legacy_config import LegacyConfigurationCodec
 
 
 class ConfigurationController:
-    def load(self, filename):
-        payload = LegacyConfigurationCodec.load(filename)
-        return payload, LegacyConfigurationTranslator.from_legacy(payload)
+    def load(self, filename: str | Path) -> dict[str, Any]:
+        return LegacyConfigurationCodec.load(filename)
 
     def save(self, filename, payload, *, encoder=None):
         LegacyConfigurationCodec.dump(filename, payload, encoder=encoder)
