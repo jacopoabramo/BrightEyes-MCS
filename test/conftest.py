@@ -6,7 +6,12 @@ creation of Windows synchronization primitives and terminate the interpreter.
 Real Jupyter console lifetimes also require a dedicated interpreter.
 """
 
+from functools import partial
 from pathlib import Path
+
+import pytest
+
+from test.acquisition_harness import RunAcquisitionLoop, run_acquisition_loop as run_loop
 
 
 QT_MODULES = {
@@ -20,8 +25,8 @@ QT_MODULES = {
 }
 
 
-def pytest_collection_modifyitems(items):
-    def category(item):
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    def category(item: pytest.Item) -> int:
         filename = Path(str(item.fspath)).name
         if filename in {"test_channel_delay_skew_plugin.py", "test_console_widget.py"}:
             item.add_marker("qt")
@@ -36,3 +41,9 @@ def pytest_collection_modifyitems(items):
         return 0
 
     items.sort(key=category)
+
+
+@pytest.fixture
+def run_acquisition_loop(tmp_path: Path) -> RunAcquisitionLoop:
+    """Run the acquisition loop in-process, writing its file into `tmp_path`."""
+    return partial(run_loop, tmp_path)
