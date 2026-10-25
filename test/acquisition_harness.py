@@ -28,6 +28,9 @@ TRACE_BINS = 50
 TRACE_SAMPLES_PER_BIN = 4
 TIME_RESOLUTION = 1e-6
 
+CHANNEL_BITS = [4, 4, 4, 4, 4, 4, 5, 6, 5, 4, 4, 6, 10, 6, 4, 4, 5, 6, 5, 4, 4, 4, 4, 4, 4]
+CHANNEL_MAX = np.array([(1 << bits) - 1 for bits in CHANNEL_BITS], dtype=np.uint64)
+
 X, Y, Z, REPETITIONS, TIMEBINS = 4, 3, 2, 2, 4
 SAMPLES = X * Y * Z * REPETITIONS * TIMEBINS
 

@@ -5,9 +5,7 @@ from brighteyes_mcs_cylibs.fastconverter import convertRawDataToCountsDirect
 from brighteyes_mcs.acquisition.detectors.pispad23.backend import (
     pispad23_pack_counts_to_spad25_words,
 )
-
-CHANNEL_BITS = [4, 4, 4, 4, 4, 4, 5, 6, 5, 4, 4, 6, 10, 6, 4, 4, 5, 6, 5, 4, 4, 4, 4, 4, 4]
-CHANNEL_MAX = np.array([(1 << bits) - 1 for bits in CHANNEL_BITS], dtype=np.uint64)
+from test.acquisition_harness import CHANNEL_MAX
 
 
 def decode(
