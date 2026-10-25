@@ -5,18 +5,10 @@ from decimal import Decimal
 import h5py
 import multiprocessing as mp
 import numpy as np
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice
 
 from brighteyes_mcs.logging_setup import logger
 from ..storage.h5_schema import DATA_FORMAT_VERSION
 from ..storage.legacy_names import translate_metadata_names
-
-
-
-try:
-    import pyqtgraph as pg
-except:
-    print("pyqtgraph not found")
 
 
 class H5Manager:
@@ -122,27 +114,11 @@ class H5Manager:
         self.h5file.attrs["data_format_version"] = DATA_FORMAT_VERSION
         self.h5file.attrs["comment"] = comment
 
-    def metadata_add_thumbnail(self, image):
+    def metadata_add_thumbnail(self, jpeg):
         logger.debug("metadata_add_thumbnail")
-        try:
-            # get the current projection save in JPEG inside the HDF5
-            exporter = pg.exporters.ImageExporter(image)
-            exporter.parameters()["width"] = 200
-            image_bitmap = exporter.export(toBytes=True)
-
-            file_ba = QByteArray()
-            file_buff = QBuffer(file_ba)
-            file_buff.open(QIODevice.WriteOnly)
-            image_bitmap.save(file_buff, "JPEG")
-            binary_data = bytes(file_buff.data())
-
-            dt = h5py.special_dtype(vlen=np.dtype("uint8"))
-            thumbnail = self.h5file.create_dataset("thumbnail", (1,), dtype=dt)
-            thumbnail[0] = np.fromstring(binary_data, dtype="uint8")
-
-        except Exception as ex:
-            logger.debug("Thumbnail creation ERROR")
-            logger.debug(ex)
+        dt = h5py.special_dtype(vlen=np.dtype("uint8"))
+        thumbnail = self.h5file.create_dataset("thumbnail", (1,), dtype=dt)
+        thumbnail[0] = np.frombuffer(jpeg, dtype="uint8")
 
     def print_keys(self):
         print(self.h5file.keys())
