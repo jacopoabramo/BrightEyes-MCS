@@ -27,9 +27,11 @@ fname = filename
 
 correlations = ["central", "sum3", "sum5"]
 chunksize = 10  # s
-correlation_result = 10  # 'resolution' of the correlation function: the higher this number, the more lag times are used
+correlation_resolution = 10  # 'resolution' of the correlation function: the higher this number, the more lag times are used
 
-[G, data] = FCSLoadAndCorrSplit(fname, correlations, correlation_result, chunksize, timeTrace=True)
+[G, data] = FCSLoadAndCorrSplit(
+    fname, correlations, correlation_resolution, chunksize, timeTrace=True
+)
 
 # plot time trace
 Nchunks = int((len(G.__dict__.keys()) - 4) / 3)
