@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class TestLegacyConfigurationContract(unittest.TestCase):
     def test_tracked_configs_round_trip_without_losing_unknown_keys(self):
-        config_files = sorted((ROOT / "brighteyes_mcs" / "cfg").rglob("*.cfg"))
+        config_files = sorted((ROOT / "src" / "brighteyes_mcs" / "cfg").rglob("*.cfg"))
         self.assertTrue(config_files)
         for filename in config_files:
             with self.subTest(filename=filename):
@@ -41,7 +41,7 @@ class TestLegacyConfigurationContract(unittest.TestCase):
                 )
 
     def test_typed_translation_preserves_unknown_keys_and_plugins(self):
-        payload = LegacyConfigurationCodec.load(ROOT / "brighteyes_mcs" / "cfg" / "default.cfg")
+        payload = LegacyConfigurationCodec.load(ROOT / "src" / "brighteyes_mcs" / "cfg" / "default.cfg")
         payload["future_key"] = {"nested": [1, 2, 3]}
         restored = LegacyConfigurationTranslator.to_legacy(
             LegacyConfigurationTranslator.from_legacy(payload)

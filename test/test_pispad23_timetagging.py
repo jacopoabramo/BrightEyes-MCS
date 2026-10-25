@@ -28,7 +28,7 @@ def app():
 @pytest.fixture
 def ui(app):
     window = QMainWindow()
-    design = Path(__file__).parents[1] / "brighteyes_mcs/ui/qt/main_window_design.ui"
+    design = Path(__file__).parents[1] / "src/brighteyes_mcs/ui/qt/main_window_design.ui"
     for connection in ET.parse(design).findall("./connections/connection"):
         if connection.findtext("receiver") == "MainWindowDesign":
             slot = connection.findtext("slot").split("(")[0]
@@ -38,7 +38,7 @@ def ui(app):
     ui.setupUi(window)
     defaults = (
         Path(__file__).parents[1]
-        / "brighteyes_mcs/cfg/plugins_cfg/pispad23_timetagging.cfg"
+        / "src/brighteyes_mcs/cfg/plugins_cfg/pispad23_timetagging.cfg"
     )
     settings = json.loads(defaults.read_text(encoding="utf-8"))
     adapter = SimpleNamespace(ui=ui)
@@ -167,7 +167,7 @@ def test_timetagging_is_inside_config(ui):
 def test_timetagging_defaults_are_loaded_from_plugins_cfg(ui):
     config_path = (
         Path(__file__).parents[1]
-        / "brighteyes_mcs/cfg/plugins_cfg/pispad23_timetagging.cfg"
+        / "src/brighteyes_mcs/cfg/plugins_cfg/pispad23_timetagging.cfg"
     )
     configuration = json.loads(config_path.read_text(encoding="utf-8"))
     window = SimpleNamespace(ui=ui)

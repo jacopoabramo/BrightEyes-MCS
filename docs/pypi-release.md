@@ -7,7 +7,7 @@
 > Public release availability has not been verified for this guide.
 
 The repository uses a root package layout: the import package is
-`brighteyes_mcs/`, built with the `uv_build` backend, which packages that
+`src/brighteyes_mcs/`, built with the `uv_build` backend, which packages that
 directory only. A move to `src/brighteyes_mcs/` is not required for
 publication.
 

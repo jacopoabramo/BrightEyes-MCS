@@ -8,9 +8,9 @@
 > major data-format version.
 
 This document describes the HDF5 files written by `brighteyes_mcs`.
-It is based on the current writer implementation in `brighteyes_mcs/storage/h5.py`,
-the workers in `brighteyes_mcs/acquisition/workers`, the RAW converters in
-`brighteyes_mcs/storage/converters`, and the
+It is based on the current writer implementation in `src/brighteyes_mcs/storage/h5.py`,
+the workers in `src/brighteyes_mcs/acquisition/workers`, the RAW converters in
+`src/brighteyes_mcs/storage/converters`, and the
 compatibility tests in `test/test_h5_metadata_compatibility.py`.
 
 ## Top-Level Layout

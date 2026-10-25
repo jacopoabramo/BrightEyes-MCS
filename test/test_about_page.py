@@ -3,6 +3,7 @@ from pathlib import Path
 
 ABOUT_PAGE = (
     Path(__file__).parents[1]
+    / "src"
     / "brighteyes_mcs"
     / "ui"
     / "qt"

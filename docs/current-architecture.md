@@ -43,7 +43,7 @@ flowchart TB
 ```
 
 The most important practical fact is that
-[`MainWindow`](../brighteyes_mcs/ui/qt/main_window.py) is still the real
+[`MainWindow`](../src/brighteyes_mcs/ui/qt/main_window.py) is still the real
 application orchestrator. New controllers and services exist, but they wrap or
 extract selected responsibilities; they do not yet replace the main window.
 
@@ -51,7 +51,7 @@ extract selected responsibilities; they do not yet replace the main window.
 
 ```text
 BrightEyes-MCS/
-├── brighteyes_mcs/          Installed application package (the active product)
+├── src/brighteyes_mcs/          Installed application package (the active product)
 │   ├── application/         Bootstrap, paths, contracts, plug-ins, Windows setup
 │   ├── acquisition/         Manager, pipelines, processes, shared memory, state
 │   ├── hardware/            NI-FPGA and TTM adapters
@@ -84,15 +84,15 @@ installed application package.
 
 | Area | Owns | Important files |
 | --- | --- | --- |
-| `application` | Startup, resource/user paths, service protocols, plug-in loading, Windows shortcut setup | [`bootstrap.py`](../brighteyes_mcs/application/bootstrap.py), [`paths.py`](../brighteyes_mcs/application/paths.py), [`plugin_service.py`](../brighteyes_mcs/application/plugin_service.py), [`windows_integration.py`](../brighteyes_mcs/application/windows_integration.py) |
-| `acquisition` | Acquisition lifecycle, detector selection, processes, queues, shared arrays, preview data | [`manager.py`](../brighteyes_mcs/acquisition/manager.py), [`coordinator.py`](../brighteyes_mcs/acquisition/coordinator.py), [`detectors/`](../brighteyes_mcs/acquisition/detectors), [`workers/`](../brighteyes_mcs/acquisition/workers) |
-| `hardware` | Hardware-facing NI-FPGA and TTM adapters | [`fpga.py`](../brighteyes_mcs/hardware/fpga.py), [`ttm.py`](../brighteyes_mcs/hardware/ttm.py) |
-| `storage` | Stable serialized formats and their legacy translations | [`h5.py`](../brighteyes_mcs/storage/h5.py), [`h5_schema.py`](../brighteyes_mcs/storage/h5_schema.py), [`legacy_config.py`](../brighteyes_mcs/storage/legacy_config.py), [`converters/`](../brighteyes_mcs/storage/converters) |
-| `api` | HTTP status, command, configuration and image endpoints | [`rest.py`](../brighteyes_mcs/api/rest.py) |
-| `ui/controllers` | Extracted configuration, lifecycle projection, preview selection, and statistics | [`controllers/`](../brighteyes_mcs/ui/controllers) |
-| `ui/qt` | Qt widgets and the current GUI composition root | [`main_window.py`](../brighteyes_mcs/ui/qt/main_window.py), [`main_window_design.ui`](../brighteyes_mcs/ui/qt/main_window_design.ui), [`flim_image_view.py`](../brighteyes_mcs/ui/qt/flim_image_view.py) |
-| `plugins` | Small public plug-in API and built-in feature packages | [`api.py`](../brighteyes_mcs/plugins/api.py), [`builtin/`](../brighteyes_mcs/plugins/builtin), [`_template/`](../brighteyes_mcs/plugins/_template) |
-| `logging_setup.py` | Process-wide standard-library logging setup | [`logging_setup.py`](../brighteyes_mcs/logging_setup.py) |
+| `application` | Startup, resource/user paths, service protocols, plug-in loading, Windows shortcut setup | [`bootstrap.py`](../src/brighteyes_mcs/application/bootstrap.py), [`paths.py`](../src/brighteyes_mcs/application/paths.py), [`plugin_service.py`](../src/brighteyes_mcs/application/plugin_service.py), [`windows_integration.py`](../src/brighteyes_mcs/application/windows_integration.py) |
+| `acquisition` | Acquisition lifecycle, detector selection, processes, queues, shared arrays, preview data | [`manager.py`](../src/brighteyes_mcs/acquisition/manager.py), [`coordinator.py`](../src/brighteyes_mcs/acquisition/coordinator.py), [`detectors/`](../src/brighteyes_mcs/acquisition/detectors), [`workers/`](../src/brighteyes_mcs/acquisition/workers) |
+| `hardware` | Hardware-facing NI-FPGA and TTM adapters | [`fpga.py`](../src/brighteyes_mcs/hardware/fpga.py), [`ttm.py`](../src/brighteyes_mcs/hardware/ttm.py) |
+| `storage` | Stable serialized formats and their legacy translations | [`h5.py`](../src/brighteyes_mcs/storage/h5.py), [`h5_schema.py`](../src/brighteyes_mcs/storage/h5_schema.py), [`legacy_config.py`](../src/brighteyes_mcs/storage/legacy_config.py), [`converters/`](../src/brighteyes_mcs/storage/converters) |
+| `api` | HTTP status, command, configuration and image endpoints | [`rest.py`](../src/brighteyes_mcs/api/rest.py) |
+| `ui/controllers` | Extracted configuration, lifecycle projection, preview selection, and statistics | [`controllers/`](../src/brighteyes_mcs/ui/controllers) |
+| `ui/qt` | Qt widgets and the current GUI composition root | [`main_window.py`](../src/brighteyes_mcs/ui/qt/main_window.py), [`main_window_design.ui`](../src/brighteyes_mcs/ui/qt/main_window_design.ui), [`flim_image_view.py`](../src/brighteyes_mcs/ui/qt/flim_image_view.py) |
+| `plugins` | Small public plug-in API and built-in feature packages | [`api.py`](../src/brighteyes_mcs/plugins/api.py), [`builtin/`](../src/brighteyes_mcs/plugins/builtin), [`_template/`](../src/brighteyes_mcs/plugins/_template) |
+| `logging_setup.py` | Process-wide standard-library logging setup | [`logging_setup.py`](../src/brighteyes_mcs/logging_setup.py) |
 
 Dependency direction should normally be:
 
@@ -158,7 +158,7 @@ loaded plug-in tabs are inserted immediately before About so it remains last.
 
 There are two different kinds of configuration location:
 
-1. Immutable packaged defaults are under `brighteyes_mcs/cfg`.
+1. Immutable packaged defaults are under `src/brighteyes_mcs/cfg`.
 2. Writable user configuration is copied to `%APPDATA%/BrightEyes-MCS` on first
    run. `%LOCALAPPDATA%` is the fallback if `APPDATA` is unavailable.
 
@@ -288,7 +288,7 @@ flowchart LR
 
 For PI SPAD23R, NI-FPGA remains the scan-control surface, but its detector FIFO is not
 used. Detector payload comes from the PI SPAD23R TCP receiver. The PI SPAD23R emulator in
-[`detectors/pispad23/emulator.py`](../brighteyes_mcs/acquisition/detectors/pispad23/emulator.py)
+[`detectors/pispad23/emulator.py`](../src/brighteyes_mcs/acquisition/detectors/pispad23/emulator.py)
 provides a software source for development.
 
 ### Processes and communication
@@ -399,7 +399,7 @@ Commands cross from the server thread into the Qt application through signals.
 
 The plug-in contract is `PLUGIN = PluginMetadata(...)` plus `setup(context)`.
 `PluginContext` offers tabs, events, named services and per-instance state.
-Plug-ins are discovered from both `brighteyes_mcs/plugins/builtin/` and the
+Plug-ins are discovered from both `src/brighteyes_mcs/plugins/builtin/` and the
 active profile's `plugin_packages_dir`; a profile package overrides a bundled
 package with the same directory name. External plug-ins import the stable API
 with `from brighteyes_mcs.plugins.api import PluginMetadata`. Their internal
@@ -425,10 +425,10 @@ not yet a complete isolation boundary.
 | `BrightEyes-MCS-libs-rs` sibling repository | Experimental Rust/PyO3 replacement for the Cython package. It deliberately exposes the same `brighteyes_mcs_cylibs.*` compatibility imports, but the root project does not currently depend on this distribution. |
 | `nifpga-fast-fifo-recv` | Required native Rust FIFO receiver used by the SPAD NI-FPGA path. This is separate from the Rust Cython-replacement repository. |
 | `nifpga` and NI drivers | Required hardware interface. Drivers and bitfiles are installed/provided separately and are not distributed in the Python wheel. |
-| `brighteyes-mcs-reader` | Listed by the root package; the bundled `brighteyes_mcs/scripts/shift_vectors.py` ScriptLauncher utility uses it. |
+| `brighteyes-mcs-reader` | Listed by the root package; the bundled `src/brighteyes_mcs/scripts/shift_vectors.py` ScriptLauncher utility uses it. |
 | `blueskyproject_mcs/` | Stand-alone `brighteyes-bluesky` package exposing the low-level register map as an Ophyd device. It does not implement or currently drive the main acquisition orchestration. |
 
-Although local bitfiles may appear under `brighteyes_mcs/bitfiles`, only the
+Although local bitfiles may appear under `src/brighteyes_mcs/bitfiles`, only the
 placeholder is tracked and the root package-data list does not include firmware.
 
 ## Tests and validation
@@ -521,4 +521,4 @@ formats, update timing, and estimation limits.
 - [`Low-level FPGA registers`](BrightEyes-MCSLL-registers.md): firmware register
   and FIFO map.
 - [`PyPI release guide`](pypi-release.md): build and publication procedure.
-- [`Plug-in README`](../brighteyes_mcs/plugins/README.md): minimal plug-in contract.
+- [`Plug-in README`](../src/brighteyes_mcs/plugins/README.md): minimal plug-in contract.

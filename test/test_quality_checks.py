@@ -27,7 +27,7 @@ def test_local_links_anchors_and_repository_references(tmp_path):
         "[good](docs/target.md#a-heading)\n"
         "[bad](docs/missing.md)\n"
         "[heading](docs/target.md#missing)\n"
-        "`brighteyes_mcs/removed.py`\n"
+        "`src/brighteyes_mcs/removed.py`\n"
         "[online](https://example.com/guide)\n",
         encoding="utf-8",
     )
@@ -70,7 +70,7 @@ def test_lint_baseline_cannot_accept_dirty_extracted_modules(tmp_path):
     with patch.object(check_lint, "BASELINE", baseline), patch(
         "sys.argv", ["check_lint", "--write-baseline"],
     ), patch.object(check_lint, "findings", return_value=Counter({
-        ("brighteyes_mcs/ui/controllers/statistics.py", "F401", "Unused", "import os"): 1,
+        ("src/brighteyes_mcs/ui/controllers/statistics.py", "F401", "Unused", "import os"): 1,
     })):
         assert check_lint.main() == 1
         assert not baseline.exists()

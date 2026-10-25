@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "lint_baseline.json"
 CLEAN_PATHS = {
-    "brighteyes_mcs/ui/controllers/statistics.py",
+    "src/brighteyes_mcs/ui/controllers/statistics.py",
     "scripts/check_docs.py", "scripts/check_lint.py",
     "test/test_statistics.py", "test/test_quality_checks.py",
 }
@@ -21,7 +21,7 @@ CLEAN_PATHS = {
 
 def findings() -> Counter:
     result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "brighteyes_mcs", "scripts", "test",
+        [sys.executable, "-m", "ruff", "check", "src", "scripts", "test",
          "--output-format=json"],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=False,
     )

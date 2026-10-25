@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LINK = re.compile(r"!?\[[^\]\n]*\]\(\s*(<[^>]+>|[^\s)]+)(?:\s+[^)]*)?\)")
 REFERENCE_LINK = re.compile(r"^\s*\[[^\]]+\]:\s*(\S+)", re.MULTILINE)
 CODE_REFERENCE = re.compile(
-    r"`((?:brighteyes_mcs|scripts|test|docs|\.github)/[^`\n]+)`"
+    r"`((?:src|scripts|test|docs|\.github)/[^`\n]+)`"
 )
 
 
@@ -24,7 +24,7 @@ def documents(root: Path) -> list[Path]:
         root / "README.md", root / "CONTRIBUTING.md",
         *root.joinpath("docs").rglob("*.md"),
         *root.joinpath("docs").rglob("*.txt"),
-        *root.joinpath("brighteyes_mcs", "plugins").rglob("README.md"),
+        *root.joinpath("src", "brighteyes_mcs", "plugins").rglob("README.md"),
     })
 
 

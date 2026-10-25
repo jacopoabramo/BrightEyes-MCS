@@ -2,7 +2,7 @@
 
 BrightEyes-MCS discovers plug-ins in two locations:
 
-1. packaged implementations in `brighteyes_mcs/plugins/builtin/`;
+1. packaged implementations in `src/brighteyes_mcs/plugins/builtin/`;
 2. the **Plug-ins folder** selected in the active microscope profile.
 
 The two lists are combined. A profile plug-in with the same directory name as a

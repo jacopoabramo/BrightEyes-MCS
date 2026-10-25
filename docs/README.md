@@ -24,7 +24,7 @@ PRISM-Light, SPAD23R, and pSPAD are trademarks or product names of their respect
 - [Contributing, tests, and Qt UI generation](../CONTRIBUTING.md)
 - [Current architecture and repository map](current-architecture.md)
 - [Refactoring boundaries and compatibility](refactoring-architecture.md)
-- [Plug-in API](../brighteyes_mcs/plugins/README.md)
+- [Plug-in API](../src/brighteyes_mcs/plugins/README.md)
 - [Build and release procedure (publishing disabled)](pypi-release.md)
 - [Wiki landing-page draft](wiki-home.md)
 

@@ -34,7 +34,7 @@ python -m unittest test.test_channel_delay_skew_plugin -v
 python -m pytest -q -m qt_isolated test/test_console_widget.py
 python scripts/check_docs.py
 python scripts/check_lint.py
-python -m compileall -q brighteyes_mcs scripts
+python -m compileall -q src scripts
 ```
 
 The normal pytest command excludes `qt_isolated` tests. Run the channel-delay
@@ -60,7 +60,7 @@ See the [release guide](docs/pypi-release.md) before publishing. Publication is 
 Edit the Designer `.ui` source, then regenerate its Python module. For the main window:
 
 ```powershell
-pyside6-uic brighteyes_mcs/ui/qt/main_window_design.ui -o brighteyes_mcs/ui/qt/main_window_design.py
+pyside6-uic src/brighteyes_mcs/ui/qt/main_window_design.ui -o src/brighteyes_mcs/ui/qt/main_window_design.py
 ```
 
 Use the compiler from the active environment and review the generated diff.
