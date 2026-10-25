@@ -2092,17 +2092,21 @@ class MainWindow(QMainWindow):
 
     @Slot()
     @trace_action
-    def spadChannelsChanged(self):
+    def spadChannelsChanged(self) -> None:
         """
         Slot for the SPAD channel-count changed event.
         """
+        self._apply_spad_channels()
+        self.mcs_manager.set_spad_channels(self.spad_channels)
+
+    def _apply_spad_channels(self) -> None:
+        """Size the channel count and fingerprint mask to the selected detector."""
         ch = int(self.ui.comboBox_spad_channels.currentText())
         logger.debug("%s %s", "spadChannelsChanged to", self.ui.comboBox_spad_channels.currentText())
         self.spad_channels = ch
         self.spad_channels_x = int(np.sqrt(ch))
         self.spad_channels_y = self.spad_channels_x
         self.fingerprint_mask = np.ones((self.spad_channels_x, self.spad_channels_y), dtype=np.uint8)
-        self.mcs_manager.set_spad_channels(int(self.ui.comboBox_spad_channels.currentText()))
 
     @Slot()
     @trace_action
@@ -4646,24 +4650,23 @@ class MainWindow(QMainWindow):
 
     @Slot()
     @trace_action
-    def circularMotionActivateChanged(self):
+    def circularMotionActivateChanged(self) -> None:
         """
         activate or disactivate the circular motion
         """
+        self._show_scan_pattern()
+        if self.ui.checkBox_circular.isChecked():
+            self.load_circular()
+        self.temporalSettingsChanged()
+
+    def _show_scan_pattern(self) -> None:
+        """Redraw the Lissajous preview and the circular scan markers."""
         self.updateLissajousMiniPlot()
         if self.ui.checkBox_circular.isChecked():
-            circular_points = self.ui.spinBox_circular_points.value()
-            self.define_circular(circular_points)
-            # self.ui.spinBox_time_bin_per_px.setValue(32)
-            # self.ui.spinBox_nx.setValue(circular_points)
-            # self.ui.spinBox_ny.setValue(100)
-            # self.ui.spinBox_time_bin_per_px.setValue(32)
-            self.load_circular()
-            self.temporalSettingsChanged()
+            self.define_circular(self.ui.spinBox_circular_points.value())
         else:
             self.markers_list_circular = []
             self.marker_plot_circular_scan.clear()
-            self.temporalSettingsChanged()
 
     def load_circular(self, ARRAY_SIZE=32):
         """
@@ -5606,13 +5609,17 @@ Have fun!
 
     @Slot()
     @trace_action
-    def temporalSettingsChanged(self):
+    def temporalSettingsChanged(self) -> None:
         """
 
         """
         logger.debug("temporalSettingsChanged")
         timing = self._timing()
         self.setRegistersDict(timing.registers())
+        self._show_timing(timing)
+
+    def _show_timing(self, timing: Timing) -> None:
+        """Show the dwell time, frame time and expected duration of `timing`."""
         time_res = timing.time_resolution_us
         time_bin = timing.timebins_per_pixel
         circ_points = timing.circular_points
@@ -6560,7 +6567,9 @@ Have fun!
     # def afterFpgaRun(self):
     #     pass
 
-    def initializeAcquisition(self, do_not_save=False, do_run=True, raw_stream_mode=False):
+    def initializeAcquisition(
+        self, do_not_save: bool = False, do_run: bool = True, raw_stream_mode: bool = False
+    ) -> None:
         """
         Initialize and configure acquisition parameters (registers, calibration, trace settings, etc.).
         This method does NOT start the acquisition - it only prepares the system.
@@ -6572,21 +6581,12 @@ Have fun!
         self.dfd_enable = self.ui.checkBox_DFD.isChecked()
         self.DFD_nbins = self.ui.spinBox_DFD_nbins.value()
 
-        # Now initialize circular motion with correct DFD state
-        self.circularMotionActivateChanged()
+        self._show_scan_pattern()
+        self._show_timing(self._timing())
 
         if self._current_detector_model() == DETECTOR_PISPAD23_TS_UIMG:
             self._sync_pispad23_ttm_detector()
-        self.spadChannelsChanged()
-        self.mcs_manager.set_spad_channels(int(self.ui.comboBox_spad_channels.currentText()))
-        if detector_uses_pispad23_pipeline(self._current_detector_model()):
-            self.mcs_manager.set_pispad23_connection(
-                self.ui.lineEdit_pispad23_ip_addr.text(),
-                self.ui.spinBox_pispad23_port.value(),
-            )
-
-        self.mcs_manager.set_dfd_enable(self.dfd_enable)
-        self.mcs_manager.set_dfd_nbins(self.DFD_nbins)
+        self._apply_spad_channels()
 
         self.ui.progressBar_fifo_digital.setMaximum(5)
         self.ui.progressBar_fifo_analog.setMaximum(5)
@@ -6616,41 +6616,10 @@ Have fun!
             )
         )
 
-        if self.spad_channels == 49:
-            self.setRegistersDict(
-                {
-                    "detector_49_channel_mode_enable": True
-                }
-            )
-        else:
-            self.setRegistersDict(
-                {
-                    "detector_49_channel_mode_enable": False
-                }
-            )
-
         self._update_offset_voltage_labels()
 
         self.snake_walk_Activate_XY = self.ui.checkBox_snake.isChecked()
         self.snake_walk_Activate_Z = self.ui.checkBox_snake_z.isChecked()
-        self.mcs_manager.set_activate_snake_walk_xy(self.snake_walk_Activate_XY)
-        self.mcs_manager.set_activate_snake_walk_z(self.snake_walk_Activate_Z)
-        self.compensationDelayForSnakeChanged(
-            self.ui.spinBox_compensation_delay.value()
-        )
-
-        lasers = self._laser_settings()
-        self.setRegistersDict(
-            {
-                **self._timing().registers(),
-                **self._scan_area().registers(),
-                **lasers.enable_registers(),
-                **lasers.sequence_registers(),
-                **self._scan_options().registers(),
-            }
-        )
-
-        # self.pmtThresholdChanged()
 
         # Keep requested settings separate from hardware read-back. Read-back
         # contains indicators and can contain reset defaults from the last run.
@@ -6681,18 +6650,8 @@ Have fun!
         self.timerPreviewImg.start()
 
         logger.debug(self.rect_roi.state)
-        self.updateMaxMinVoltages()
 
-        self.analogOutChanged()
-        self.configure_analog()
-
-        if do_run:
-            self.configure_stream_enables()
-        self.activateShowPreview(self.ui.checkBox_showPreview.isChecked() and not raw_stream_mode)
-
-
-        self.mcs_manager.set_do_not_save(do_not_save or self._mcs_saving_suppressed)
-        self.mcs_manager.set_raw_stream_mode(raw_stream_mode)
+        self._sync_auxiliary_position_outputs()
 
         filename_for_ttm = self.defineFilename(with_folder=False)
         if self.ttm_remote_is_up() and not do_not_save:
@@ -6709,49 +6668,21 @@ Have fun!
             else self.defineFilename(with_folder=True)
         )
         self.last_requested_filename = filename
-        self.mcs_manager.set_filename_h5(filename)
         if raw_stream_mode:
             self.raw_stream_output_files = self.defineRawOutputFiles(filename)
-            self.mcs_manager.set_raw_output_files(self.raw_stream_output_files)
         else:
             self.raw_stream_output_files = {}
-        self.mcs_manager.set_autocorrelation_maxx(
-            self.ui.spinBox_FCSbins.value()
+
+        config = self._acquisition_config(
+            do_not_save, raw_stream_mode, filename, self.raw_stream_output_files
         )
+        written = self.mcs_manager.prepare_run(config, streams=do_run)
+        self.configurationFPGA_dict.update(written)
 
-        trace_bins = int(
-            self.ui.doubleSpinBox_binsize.value()
-            * 1e3
-            / (self.ui.spinBox_timeresolution.value())
-        )
-
-        trace_length = (
-                self.ui.doubleSpinBox_maxlength.value()
-                * 1e6
-                / (self.ui.spinBox_timeresolution.value())
-        )
-
-        trace_sample_per_bins = int(trace_length // trace_bins)
-
-        logger.debug("%s %s", "trace_bins", trace_bins)
-        logger.debug("%s %s", "trace_length", trace_length)
-        logger.debug("%s %s", "trace_sample_per_bins", trace_sample_per_bins)
-
-        self.mcs_manager.set_trace_bins(trace_bins=trace_bins)
-        self.mcs_manager.set_trace_sample_per_bins(
-            trace_sample_per_bins=trace_sample_per_bins
-        )
-
-        self.ui.label_trace_total_bins.setText("%s" % trace_sample_per_bins)
+        self.ui.label_trace_total_bins.setText("%s" % self.mcs_manager.trace_sample_per_bins)
         self.ui.label_configured_fifo_depth.setText(
             "%d" % self.mcs_manager.fpga_handle.get_actual_fifo_depth()
         )
-        if self.dfd_enable:
-            self.mcs_manager.set_clk_multiplier(
-                self.ui.spinBox_clk_base_multiplier.value()
-            )
-        else:
-            self.mcs_manager.set_clk_multiplier(1)
 
         # self.mcs_manager.acquistion_run()
         if self.ttm_remote_is_up() and not do_not_save:
@@ -6762,8 +6693,6 @@ Have fun!
            not do_not_save :
                self.pushButton_uttm_start_clicked()
 
-        self.mcs_manager.pispad23_stream_port = self.ui.spinBox_pispad23ttm_stream_port.value()
-        self.mcs_manager.pispad23_batch_size = self.ui.spinBox_pispad23ttm_uimg_batch.value()
         trigger = getattr(self, "software_trigger", None)
         if do_run and trigger is not None and trigger.selected():
             trigger.prepare(do_not_save)
@@ -7895,13 +7824,11 @@ Have fun!
         trigger = getattr(self, "software_trigger", None)
         return trigger is None or trigger.can_finalize
 
-    def sendCmdRun(self):
+    def sendCmdRun(self) -> None:
         """
         send the run command to the FPGA
         """
-        # The session stays open between runs, so every run needs a fresh edge.
-        self.setRegistersDict({"stop_command": False, "start_command": True})
-        self.setRegistersDict({"start_command": False})
+        self.configurationFPGA_dict.update(self.mcs_manager.start())
 
     def sendCmdStop(self):
         """
