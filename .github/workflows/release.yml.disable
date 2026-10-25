@@ -17,8 +17,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check the changelog has a section for a final release
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            python3 scripts/release_notes.py extract "${GITHUB_REF_NAME#v}" > /dev/null
+          fi
+
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           python-version: "3.13"
 
@@ -67,3 +74,28 @@ jobs:
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  # final tags only: a release candidate's entries stay in changelog.d for
+  # the final release's section
+  github-release:
+    name: Write the GitHub release notes
+    needs: publish
+    if: ${{ !contains(github.ref_name, 'rc') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the release's notes from its changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_notes.py extract "${GITHUB_REF_NAME#v}" > notes.md
+          # a release published from the interface already exists; a tag pushed
+          # from a clone has none yet
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+          fi
