@@ -141,8 +141,12 @@ class RawStreamWriterProcess(mp.Process):
                     queue_depth = self.queue_in.qsize()
                 except Exception:
                     queue_depth = 0
-                self.shared_dict["stream_out_main_status"] = queue_depth if "stream_out_main" in self.active_fifos else 0
-                self.shared_dict["stream_out_aux_status"] = queue_depth if "stream_out_aux" in self.active_fifos else 0
+                self.shared_dict["stream_out_main_status"] = (
+                    queue_depth if "stream_out_main" in self.active_fifos else 0
+                )
+                self.shared_dict["stream_out_aux_status"] = (
+                    queue_depth if "stream_out_aux" in self.active_fifos else 0
+                )
 
                 if idle_after_stop >= 3:
                     if self.stop_event.is_set():
@@ -163,7 +167,9 @@ class RawStreamWriterProcess(mp.Process):
 
             for fifo_name, filename in self.raw_output_files.items():
                 try:
-                    self.shared_dict[f"{fifo_name}_actual_bytes_on_disk"] = os.path.getsize(filename)
+                    self.shared_dict[f"{fifo_name}_actual_bytes_on_disk"] = os.path.getsize(
+                        filename
+                    )
                 except OSError:
                     self.shared_dict[f"{fifo_name}_actual_bytes_on_disk"] = 0
 

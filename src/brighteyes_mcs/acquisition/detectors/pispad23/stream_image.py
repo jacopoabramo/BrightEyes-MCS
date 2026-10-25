@@ -37,6 +37,7 @@ def read_microimage(port, timeout=2.0):
 def _read_packet(port, width, height, expected_magic, request, timeout):
     deadline = time.monotonic() + timeout
     with socket.create_connection(("127.0.0.1", port), timeout=timeout) as connection:
+
         def receive(size):
             data = bytearray()
             while len(data) < size:
@@ -55,8 +56,8 @@ def _read_packet(port, width, height, expected_magic, request, timeout):
 
 
 def _decode_packet(receive, width, height, expected_magic):
-    magic, version, status, nx, ny, pixel, flags, frame, x, y, events, size = (
-        HEADER.unpack(receive(HEADER.size))
+    magic, version, status, nx, ny, pixel, flags, frame, x, y, events, size = HEADER.unpack(
+        receive(HEADER.size)
     )
     if magic != expected_magic or version != 1 or status not in (0, 1):
         raise ValueError("Invalid PISPAD23 image header")

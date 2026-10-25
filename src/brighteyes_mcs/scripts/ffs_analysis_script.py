@@ -25,12 +25,12 @@ from spad_ffs_eli.Tools.np2hdf5 import hdf5Read
 plt.style.use("default")
 fname = filename
 
-listOfCorrelations = ["central", "sum3", "sum5"]
+correlations = ["central", "sum3", "sum5"]
 chunksize = 10  # s
-corRes = 10  # 'resolution' of the correlation function: the higher this number, the more lag times are used
+correlation_resolution = 10  # 'resolution' of the correlation function: the higher this number, the more lag times are used
 
 [G, data] = FCSLoadAndCorrSplit(
-    fname, listOfCorrelations, corRes, chunksize, timeTrace=True
+    fname, correlations, correlation_resolution, chunksize, timeTrace=True
 )
 
 # plot time trace
@@ -64,20 +64,20 @@ for i in range(Nchunks):
     plt.title("Chunk " + str(i))
     plt.xscale("log")
 
-goodChunks = list(range(Nchunks))
+good_chunks = list(range(Nchunks))
 
 G.central_average *= 0
 G.sum3_average *= 0
 G.sum5_average *= 0
 
-for chunk in goodChunks:
+for chunk in good_chunks:
     G.central_average += getattr(G, "central_chunk" + str(chunk))
     G.sum3_average += getattr(G, "sum3_chunk" + str(chunk))
     G.sum5_average += getattr(G, "sum5_chunk" + str(chunk))
 
-G.central_average /= len(goodChunks)
-G.sum3_average /= len(goodChunks)
-G.sum5_average /= len(goodChunks)
+G.central_average /= len(good_chunks)
+G.sum3_average /= len(good_chunks)
+G.sum5_average /= len(good_chunks)
 
 
 plt.figure()
@@ -92,19 +92,17 @@ dummy = plt.ylabel("G")
 # fit correlations
 start = 1  # start index to fit the data, set to 15-30 to remove the afterpulse component at short lag times
 fitarray = np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # parameters to fit
-minBound = np.array(
-    [0, 5e-2, 5e-2, 0, 0, 0, 0, 0, 0, 0, 0]
-)  # minimum values for the parameters
-maxBound = np.array(
+min_bound = np.array([0, 5e-2, 5e-2, 0, 0, 0, 0, 0, 0, 0, 0])  # minimum values for the parameters
+max_bound = np.array(
     [1e6, 10, 10, 1, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6]
 )  # maximum values for the parameters
 
 # ---------- central element ----------
 SF = 4.5  # shape factor, i.e. z0/w0 with z0 the height of the PSF and w0 the width (1/e^2 radius of the intensity)
-startValues = np.array(
+start_values = np.array(
     [70, 0.4, 0.8e-10, 1, 1, 0, 1e-6, SF, 0, 0, 1.05]
 )  # start values for the fit
-plotInfo = "central"  # used for the color of the output plot
+plot_info = "central"  # used for the color of the output plot
 Gexp = G.central_average[:, 1]
 tau = G.central_average[:, 0]
 fitresult1 = FCSfit(
@@ -112,20 +110,20 @@ fitresult1 = FCSfit(
     tau[start:],
     "fitfun2C",
     fitarray,
-    startValues,
-    minBound,
-    maxBound,
-    plotInfo,
+    start_values,
+    min_bound,
+    max_bound,
+    plot_info,
     0,
     0,
 )
 
 # ---------- sum3x3 ----------
 SF = 4.1
-startValues = np.array(
+start_values = np.array(
     [70, 0.4, 0.8e-10, 1, 1, 0, 1e-6, SF, 0, 0, 1.05]
 )  # start values for the fit
-plotInfo = "sum3"
+plot_info = "sum3"
 Gexp = G.sum3_average[:, 1]
 tau = G.sum3_average[:, 0]
 fitresult3 = FCSfit(
@@ -133,20 +131,20 @@ fitresult3 = FCSfit(
     tau[start:],
     "fitfun2C",
     fitarray,
-    startValues,
-    minBound,
-    maxBound,
-    plotInfo,
+    start_values,
+    min_bound,
+    max_bound,
+    plot_info,
     0,
     0,
 )
 
 # ---------- sum5x5 ----------
 SF = 4.1
-startValues = np.array(
+start_values = np.array(
     [70, 0.4, 0.8e-10, 1, 1, 0, 1e-6, SF, 0, 0, 1.05]
 )  # start values for the fit
-plotInfo = "sum5"
+plot_info = "sum5"
 Gexp = G.sum5_average[:, 1]
 tau = G.sum5_average[:, 0]
 fitresult5 = FCSfit(
@@ -154,10 +152,10 @@ fitresult5 = FCSfit(
     tau[start:],
     "fitfun2C",
     fitarray,
-    startValues,
-    minBound,
-    maxBound,
-    plotInfo,
+    start_values,
+    min_bound,
+    max_bound,
+    plot_info,
     0,
     0,
 )
@@ -185,9 +183,7 @@ w02max = np.max(w02) * 1.1
 plt.figure()
 for i in range(3):
     plt.scatter(w02[i], taums[i])
-plt.plot(
-    [0, w02max], [1000 * b, 1000 * a * w02max * 1e-12 + 1000 * b], "-k", linewidth=0.2
-)
+plt.plot([0, w02max], [1000 * b, 1000 * a * w02max * 1e-12 + 1000 * b], "-k", linewidth=0.2)
 plt.xlim([0, w02max])
 plt.ylim([0, taumax])
 plt.title("Diffusion law")

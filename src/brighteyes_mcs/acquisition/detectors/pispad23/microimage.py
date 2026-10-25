@@ -1,4 +1,4 @@
-﻿"""Process completed 25-channel dwells into scan images and fingerprints.
+"""Process completed 25-channel dwells into scan images and fingerprints.
 
 Counts are already decoded by Rust. Keep their uint32 precision instead of
 packing them into the limited-width SPAD FIFO format. Scan coordinates come
@@ -58,7 +58,7 @@ class MicroimagePreview:
             self.fingerprints[2] -= self.recent[0]
         self.recent.append(counts)
         self.fingerprints[2] += counts
-        self.fingerprints[4] += (counts == np.iinfo(np.uint32).max)
+        self.fingerprints[4] += counts == np.iinfo(np.uint32).max
         self.frame_dwells += 1
         self.total_dwells += 1
         if self.frame_dwells == self.width * self.height:

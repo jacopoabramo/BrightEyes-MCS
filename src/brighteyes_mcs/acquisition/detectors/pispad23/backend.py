@@ -89,7 +89,7 @@ class PISPAD23TcpBunchSource:
         shared_dict=None,
         debug=False,
     ):
-        read_chunk_size = 8192 #hard-coded to avoid too large reads
+        read_chunk_size = 8192  # hard-coded to avoid too large reads
 
         self.fifo_chuck_size_digital = fifo_chuck_size_digital
         self.fifo_chuck_size_analog = fifo_chuck_size_analog
@@ -123,7 +123,14 @@ class PISPAD23TcpBunchSource:
         self.started_at_ns = perf_counter_ns()
         self._counts = None
         self._sample_cursor = 0
-        logger.debug("%s %s %s %s %s", "PISPAD23 source start", f"{self.host}:{self.port}", f"scan={self.scan_x}x{self.scan_y}x{self.scan_frames}", f"timebins={self.timebins_per_pixel}", f"dwell_us={self.dwell_us}")
+        logger.debug(
+            "%s %s %s %s %s",
+            "PISPAD23 source start",
+            f"{self.host}:{self.port}",
+            f"scan={self.scan_x}x{self.scan_y}x{self.scan_frames}",
+            f"timebins={self.timebins_per_pixel}",
+            f"dwell_us={self.dwell_us}",
+        )
         pispad23_debug(
             "source start",
             f"{self.host}:{self.port}",
@@ -148,7 +155,12 @@ class PISPAD23TcpBunchSource:
             logger.debug("%s %s", "PISPAD23 source receiving scan", fifo_name)
             self._counts = self.pispad23_receive_scan_counts()
             self._sample_cursor = 0
-            logger.debug("%s %s %s", "PISPAD23 source received scan", f"samples={self._counts.shape[0]}", f"channels={self._counts.shape[1]}")
+            logger.debug(
+                "%s %s %s",
+                "PISPAD23 source received scan",
+                f"samples={self._counts.shape[0]}",
+                f"channels={self._counts.shape[1]}",
+            )
             pispad23_debug(
                 "received scan",
                 f"samples={self._counts.shape[0]}",
@@ -165,7 +177,12 @@ class PISPAD23TcpBunchSource:
             logger.debug("%s %s", "PISPAD23 source receiving next scan", fifo_name)
             self._counts = self.pispad23_receive_scan_counts()
             self._sample_cursor = 0
-            logger.debug("%s %s %s", "PISPAD23 source received next scan", f"samples={self._counts.shape[0]}", f"channels={self._counts.shape[1]}")
+            logger.debug(
+                "%s %s %s",
+                "PISPAD23 source received next scan",
+                f"samples={self._counts.shape[0]}",
+                f"channels={self._counts.shape[1]}",
+            )
             remaining_samples = self._counts.shape[0]
             if remaining_samples <= 0:
                 return None
@@ -190,7 +207,12 @@ class PISPAD23TcpBunchSource:
         self.generated_words["stream_out_main"] = self.generated_words.get("stream_out_main", 0) + (
             bunch.sample_count * self.digital_words_per_sample
         )
-        logger.debug("%s %s %s", "PISPAD23 source emit bunch", f"samples={bunch.sample_count}", f"cursor={self._sample_cursor}/{self._counts.shape[0]}")
+        logger.debug(
+            "%s %s %s",
+            "PISPAD23 source emit bunch",
+            f"samples={bunch.sample_count}",
+            f"cursor={self._sample_cursor}/{self._counts.shape[0]}",
+        )
         pispad23_debug(
             "emit bunch",
             f"samples={bunch.sample_count}",
@@ -237,11 +259,14 @@ class PISPAD23TcpBunchSource:
             logger.debug("%s %s", "PISPAD23 TCP send", command.strip())
             tcp.sendall(command.encode("utf-8"))
 
-            software_trigger = self.shared_dict is not None and self.shared_dict.get("software_trigger_enabled", False)
+            software_trigger = self.shared_dict is not None and self.shared_dict.get(
+                "software_trigger_enabled", False
+            )
             if software_trigger:
                 tcp.settimeout(0.5)
                 self.shared_dict["software_trigger_receiver_ready"] = (
-                    self.shared_dict.get("software_trigger_receiver_ready", 0) + 1)
+                    self.shared_dict.get("software_trigger_receiver_ready", 0) + 1
+                )
 
             while True:
                 try:
@@ -315,7 +340,7 @@ class PISPAD23TcpBunchSource:
         usable_channels = min(detector_planes, output_channels)
         pixel_major = planes[:, :usable_channels, :, :].transpose(0, 2, 3, 1)
         pixel_major = pixel_major.reshape(frames * self.scan_y * self.scan_x, usable_channels)
-        counts[0:: self.timebins_per_pixel, :usable_channels] = pixel_major
+        counts[0 :: self.timebins_per_pixel, :usable_channels] = pixel_major
         return counts
 
     def _next_packet_words(self, fifo_name, remaining_samples=None):
@@ -336,7 +361,9 @@ class PISPAD23TcpBunchSource:
 
         remaining_words = expected_words - generated_words
         if remaining_samples is not None:
-            remaining_words = min(remaining_words, int(remaining_samples) * self.digital_words_per_sample)
+            remaining_words = min(
+                remaining_words, int(remaining_samples) * self.digital_words_per_sample
+            )
         if remaining_words <= 0:
             return 0
         if remaining_words < packet_words:
@@ -445,7 +472,9 @@ def pispad23_decode_raw_bunch_to_spad_preview_words(
 
     words_per_sample = max(1, int(digital_words_per_sample))
     if words_per_sample != 2:
-        raise NotImplementedError("PISPAD23 TCP scanning currently packs to the 25-channel SPAD word layout")
+        raise NotImplementedError(
+            "PISPAD23 TCP scanning currently packs to the 25-channel SPAD word layout"
+        )
 
     counts = np.asarray(raw_bunch.payload["channel_counts"], dtype=np.uint64)
     return pispad23_pack_counts_to_spad25_words(counts)
@@ -508,7 +537,8 @@ class PISPAD23RandomBunchSource:
             payload={
                 "channel_counts": counts,
                 "source": "random",
-                "sample_start": self.generated_words["stream_out_main"] // self.digital_words_per_sample,
+                "sample_start": self.generated_words["stream_out_main"]
+                // self.digital_words_per_sample,
             },
         )
         self.generated_words["stream_out_main"] += sample_count * self.digital_words_per_sample

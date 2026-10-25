@@ -1925,7 +1925,7 @@ class MainWindow(QMainWindow):
         """
 
         logger.debug("FCSReset")
-        self.mcs_manager.FCS_reset()
+        self.mcs_manager.fcs_reset()
 
     @Slot()
     def table_markers_keyPressEvent(self, event):
@@ -3069,7 +3069,7 @@ class MainWindow(QMainWindow):
                 )
 
         try:
-            self.mcs_manager.stopPreview()
+            self.mcs_manager.stop_preview()
         except Exception:
             logger.exception("Could not stop acquisition/preview workers")
 
@@ -3095,7 +3095,7 @@ class MainWindow(QMainWindow):
             logger.debug("FPGA watchdog timer was not active during shutdown")
 
         try:
-            self.mcs_manager.stopAcquisition()
+            self.mcs_manager.stop_acquisition()
         except Exception:
             logger.exception("Could not stop acquisition processes")
 
@@ -3113,7 +3113,7 @@ class MainWindow(QMainWindow):
             logger.exception("Could not close the TTM manager")
 
         try:
-            self.mcs_manager.stopFPGA()
+            self.mcs_manager.stop_fpga()
         except Exception:
             logger.exception("FPGA session shutdown reported errors")
         finally:
@@ -3272,7 +3272,7 @@ class MainWindow(QMainWindow):
             return
         self.configurationFPGA_dict.update(myconf)
         # debug("setRegistersDict", self.configurationFPGA_dict)
-        self.mcs_manager.setRegistersDict(myconf)
+        self.mcs_manager.set_registers_dict(myconf)
         # debug("Waiting setRegistersDict")
 
     @Slot()
@@ -3829,7 +3829,7 @@ class MainWindow(QMainWindow):
     def finalizeImage(self):
         logger.debug("finalizeImage()")
         self.plotCurrentImage()
-        data_finger_print = self.mcs_manager.getFingerprint()
+        data_finger_print = self.mcs_manager.get_fingerprint()
         if data_finger_print is None:
             pass
         else:
@@ -4870,19 +4870,19 @@ class MainWindow(QMainWindow):
         D = "⏹"
         F = "⏹"
         try:
-            if self.mcs_manager.previewProcess_isAlive():
+            if self.mcs_manager.preview_process_is_alive():
                 P = "⏩"
         except (AttributeError, ValueError, OSError):
             logger.debug('Preview process status is unavailable', exc_info=True)
 
         try:
-            if self.mcs_manager.dataProcess_isAlive():
+            if self.mcs_manager.data_process_is_alive():
                 D = "⏩"
         except (AttributeError, ValueError, OSError):
             logger.debug('Data process status is unavailable', exc_info=True)
 
         try:
-            if self.mcs_manager.fpga_handle.fpga_handle_process_isAlive():
+            if self.mcs_manager.fpga_handle.fpga_handle_process_is_alive():
                 F = "⏩"
         except (AttributeError, ValueError, OSError):
             logger.debug('FPGA process status is unavailable', exc_info=True)
@@ -5021,10 +5021,10 @@ class MainWindow(QMainWindow):
 
         #fifo_name is the "priority" fifo when two are activated
         
-        fifo_elements = { fifo : self.mcs_manager.getCurrentAcquistionElement(fifo) for fifo in fifo_activated}
-        expected_fifo_elements = { fifo : self.mcs_manager.getExpectedFifoElements(fifo) for fifo in fifo_activated}
-        expected_fifo_elements_per_frame = { fifo : self.mcs_manager.getExpectedFifoElementsPerFrame(fifo) for fifo in fifo_activated}
-        current_preview_element = { fifo : self.mcs_manager.getCurrentPreviewElement(fifo) for fifo in fifo_activated}
+        fifo_elements = { fifo : self.mcs_manager.get_current_acquisition_element(fifo) for fifo in fifo_activated}
+        expected_fifo_elements = { fifo : self.mcs_manager.get_expected_fifo_elements(fifo) for fifo in fifo_activated}
+        expected_fifo_elements_per_frame = { fifo : self.mcs_manager.get_expected_fifo_elements_per_frame(fifo) for fifo in fifo_activated}
+        current_preview_element = { fifo : self.mcs_manager.get_current_preview_element(fifo) for fifo in fifo_activated}
         number_of_threads_h5 = self.mcs_manager.get_number_of_threads_h5()
 
         data_point_str = ""
@@ -5147,7 +5147,7 @@ class MainWindow(QMainWindow):
             / expected_fifo_elements_per_frame[fifo_name]
         )
 
-        corralation = self.mcs_manager.getAutocorrelation()
+        corralation = self.mcs_manager.get_autocorrelation()
         self.fcs_widget.plot(
             corralation[0, :] * time_res * 1e-6,
             corralation[1, :],
@@ -5157,7 +5157,7 @@ class MainWindow(QMainWindow):
 
         clk_multiplier = self.ui.spinBox_clk_base_multiplier.value()
 
-        trace, trace_pos = self.mcs_manager.getTrace()
+        trace, trace_pos = self.mcs_manager.get_trace()
         self.trace_widget.setLabel("bottom", "Time", "s")
         trace_x = trace[0, :trace_pos]
         trace_y = trace[1, :trace_pos]
@@ -5205,7 +5205,7 @@ class MainWindow(QMainWindow):
 
         self.trace_dfd_widget.setVisible(self.dfd_enable)
         if self.dfd_enable:
-            dfd_trace = self.mcs_manager.getDfdTrace()
+            dfd_trace = self.mcs_manager.get_dfd_trace()
             trace_dfd_x = dfd_trace[0, :]
             trace_live = dfd_trace[1, :]
             trace_sum = dfd_trace[2, :]
@@ -5330,7 +5330,7 @@ class MainWindow(QMainWindow):
         if self.fingerprint_visualization == 0:
             if ( fifo_elements[fifo_name] % expected_fifo_elements_per_frame[fifo_name] ) != 0:
                 data_finger_print = (
-                        self.mcs_manager.getFingerprintCumulative()
+                        self.mcs_manager.get_fingerprint_cumulative()
                         / (
                                 (
                                         (
@@ -5346,16 +5346,16 @@ class MainWindow(QMainWindow):
                 )
         elif self.fingerprint_visualization == 1:
             data_finger_print = (
-                    self.mcs_manager.getFingerprintCumulativeLast10000()
+                    self.mcs_manager.get_fingerprint_cumulative_last_10000()
                     / (10000 * time_res * 1e-6)
             )
         elif self.fingerprint_visualization == 2:
             data_finger_print = (
-                    self.mcs_manager.getFingerprintCumulativeLastFrame()
+                    self.mcs_manager.get_fingerprint_cumulative_last_frame()
                     / (expected_fifo_elements_per_frame[fifo_name] / 2 * time_res * 1e-6)
             )
 
-        saturation_data = self.mcs_manager.getFingerprintSaturation()
+        saturation_data = self.mcs_manager.get_fingerprint_saturation()
 
         if data_finger_print is not None:
             data_finger_print = data_finger_print * self.fingerprint_mask
@@ -5497,7 +5497,7 @@ class MainWindow(QMainWindow):
         for xxx in range(self.spad_channels_x):
             for yyy in range(self.spad_channels_y):
                 if saturation_data[yyy, xxx] > 0:
-                    v = self.mcs_manager.getFingerprintCumulative() * 1.
+                    v = self.mcs_manager.get_fingerprint_cumulative() * 1.
                     ratio = saturation_data[yyy, xxx] / v[yyy, xxx]
                     size = 1 + min(ratio * 8 * 100, 8)
 
@@ -6651,11 +6651,11 @@ Have fun!
             )
 
         try:
-            self.mcs_manager.stopPreview()
+            self.mcs_manager.stop_preview()
             self.timerPreviewImg.stop()
-            self.mcs_manager.stopFPGA()
+            self.mcs_manager.stop_fpga()
         finally:
-            self.mcs_manager.stopAcquisition(keep_fpga_loaded=False)
+            self.mcs_manager.stop_acquisition(keep_fpga_loaded=False)
             self.mcs_manager.is_connected = False
             self._update_fpga_connection_button()
 
@@ -6719,7 +6719,7 @@ Have fun!
             )
 
         self.mcs_manager.set_dfd_enable(self.dfd_enable)
-        self.mcs_manager.set_DFD_nbins(self.DFD_nbins)
+        self.mcs_manager.set_dfd_nbins(self.DFD_nbins)
 
         self.ui.progressBar_fifo_digital.setMaximum(5)
         self.ui.progressBar_fifo_analog.setMaximum(5)
@@ -7033,7 +7033,7 @@ Have fun!
                 self._waiting_for_pispad23 = True
                 self.pispad23_timetagging.start(
                     filename, stream_microimage=True, preview=do_not_save,
-                    microimage_worker=self.mcs_manager.previewProcess,
+                    microimage_worker=self.mcs_manager.preview_process,
                     record=not do_not_save and self.ui.checkBox_pispad23ttmActivate.isChecked(),
                 )
             elif (not do_not_save and self.ui.checkBox_pispad23ttmActivate.isChecked()
@@ -7118,7 +7118,7 @@ Have fun!
         """
         activate the preview mode
         """
-        self.mcs_manager.activateShowPreview(enable)
+        self.mcs_manager.set_show_preview(enable)
 
     def configure_stream_enables(self):
         """
@@ -7134,7 +7134,7 @@ Have fun!
         if self.ui.checkBox_fifo_analog.isChecked():
             fifo.append("stream_out_aux")
 
-        self.mcs_manager.setActivatedFifo(fifo)
+        self.mcs_manager.set_activated_fifo(fifo)
 
         if self.dfd_enable:
             self.setRegistersDict(
@@ -7540,7 +7540,7 @@ Have fun!
         }[self.fingerprint_visualization]
         fingerprint = self.mcs_manager.preview_repository.get_fingerprint(plane)
         fingerprint = fingerprint / max(dwells * dwell_seconds, 1e-12) * self.fingerprint_mask
-        self.draw_fingerprint(fingerprint, self.mcs_manager.getFingerprintSaturation())
+        self.draw_fingerprint(fingerprint, self.mcs_manager.get_fingerprint_saturation())
         if self.ui.checkBox_correlationMatrix.isChecked():
             self.microimage_analysis(fingerprint)
         if self.ui.checkBox_showPreview.isChecked():
@@ -8052,15 +8052,15 @@ Have fun!
         except Exception as error:
             reset_error = error
         finally:
-            self.mcs_manager.stopPreview()
+            self.mcs_manager.stop_preview()
             self.timerPreviewImg.stop()
             logger.debug("self.timerPreviewImg.stop()")
             if not keep_fpga_loaded:
-                self.mcs_manager.stopFPGA()
-            self.mcs_manager.stopAcquisition(
+                self.mcs_manager.stop_fpga()
+            self.mcs_manager.stop_acquisition(
                 keep_fpga_loaded=keep_fpga_loaded and reset_error is None
             )
-            self.mcs_manager.stopPreview()
+            self.mcs_manager.stop_preview()
             self._update_fpga_connection_button()
 
         if trigger is not None and trigger.active:
@@ -8068,7 +8068,7 @@ Have fun!
 
         if reset_error is not None:
             if keep_fpga_loaded:
-                self.mcs_manager.stopFPGA()
+                self.mcs_manager.stop_fpga()
             raise reset_error
 
     @Slot()
@@ -8209,7 +8209,7 @@ Have fun!
         ch = self.ui.comboBox_plot_channel.currentText()
         if preview_img is None:
             if self.isLifetimeColorChannel(ch) or ch in ("LIFETIME", "QUALITY"):
-                preview_hcl = self.mcs_manager.getPreviewHclImage()
+                preview_hcl = self.mcs_manager.get_preview_hcl_image()
                 if self.isLifetimeColorChannel(ch):
                     preview_img = preview_hcl
                 elif ch == "LIFETIME":

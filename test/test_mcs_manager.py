@@ -26,7 +26,7 @@ class TestMcsManager(unittest.TestCase):
             instance.set_detector_model(model)
             instance.dim_x, instance.dim_y, instance.dim_z = 3, 2, 1
             instance.fpga_handle = MagicMock()
-            instance.readRegistersDict = MagicMock()
+            instance.read_registers_dict = MagicMock()
             instance.set_do_not_save(True)
             instance.acquisition_storage.start = MagicMock()
             with patch("brighteyes_mcs.acquisition.detectors.pispad23.pipeline.PISPAD23ReceiverProcess") as receiver:
@@ -35,14 +35,14 @@ class TestMcsManager(unittest.TestCase):
                     self.assertEqual(instance.detector_pipeline.detector_model, model)
                     self.assertIsNone(instance.detector_receiver_process)
                     self.assertIsNone(instance.detector_receiver_queue)
-                    self.assertIsNone(instance.dataProcess)
+                    self.assertIsNone(instance.data_process)
                     self.assertIsNone(instance.raw_writer_process)
                     instance.fpga_handle.set_list_fifos_to_read_continously.assert_called_with([])
                     if model == DETECTOR_PISPAD23_TS_UIMG:
-                        self.assertTrue(instance.previewProcess.is_alive())
+                        self.assertTrue(instance.preview_process.is_alive())
                         self.assertIn("shared_fingerprint", instance.detector_pipeline.worker.shared_objects)
-                    instance.stopPreview()
-                    instance.stopAcquisition()
+                    instance.stop_preview()
+                    instance.stop_acquisition()
                 receiver.assert_not_called()
             instance.acquisition_storage.start.assert_not_called()
 
@@ -52,7 +52,7 @@ class TestMcsManager(unittest.TestCase):
                 instance = McsManager()
                 instance.set_detector_model(DETECTOR_DISABLED)
                 instance.fpga_handle = MagicMock()
-                instance.readRegistersDict = MagicMock()
+                instance.read_registers_dict = MagicMock()
                 instance.set_do_not_save(preview)
                 instance.raw_stream_mode = raw
                 instance.acquisition_storage.start = MagicMock()
@@ -62,20 +62,20 @@ class TestMcsManager(unittest.TestCase):
                 instance.fpga_handle.set_list_fifos_to_read_continously.assert_called_once_with([])
                 instance.fpga_handle.runfpga.assert_called_once_with()
                 instance.acquisition_storage.start.assert_not_called()
-                self.assertIsNone(instance.dataProcess)
-                self.assertIsNone(instance.previewProcess)
+                self.assertIsNone(instance.data_process)
+                self.assertIsNone(instance.preview_process)
                 self.assertIsNone(instance.raw_writer_process)
                 self.assertIsNone(instance.detector_receiver_process)
                 self.assertIsNone(instance.detector_receiver_queue)
-                instance.stopPreview()
-                instance.stopAcquisition()
+                instance.stop_preview()
+                instance.stop_acquisition()
 
     def test_disabled_keeps_scan_configuration_and_disables_fifo_output(self):
         instance = McsManager()
         instance.set_detector_model(DETECTOR_DISABLED)
         instance.is_connected = True
         instance.fpga_handle = MagicMock()
-        instance.setRegistersDict({
+        instance.set_registers_dict({
             "max_pixel": 100, "max_line": 200, "max_frame": 3,
             "stream_out_main_enable": True, "stream_out_aux_enable": True,
             "start_command": True,
@@ -274,7 +274,7 @@ class TestMcsManager(unittest.TestCase):
         instance.is_connected = True
         instance.fpga_handle = MagicMock()
 
-        instance.setRegistersDict(
+        instance.set_registers_dict(
             {
                 "stream_out_main_enable": True,
                 "stream_out_aux_enable": True,
@@ -292,7 +292,7 @@ class TestMcsManager(unittest.TestCase):
         instance.is_connected = True
         instance.fpga_handle = MagicMock()
 
-        instance.setRegistersDict(
+        instance.set_registers_dict(
             {
                 "max_pixel": 100,
                 "max_line": 200,
@@ -323,7 +323,7 @@ class TestMcsManager(unittest.TestCase):
             "max_repetition": 2,
         }
 
-        instance.readRegistersDict()
+        instance.read_registers_dict()
 
         self.assertEqual(instance.dim_x, 100)
         self.assertEqual(instance.dim_y, 200)
@@ -344,39 +344,39 @@ class TestMcsManager(unittest.TestCase):
     def test_run_starts_dataProcess_and_previewProcess(self):
         instance = McsManager()
         instance.fpga_handle = MagicMock()
-        instance.readRegistersDict = MagicMock()
-        instance.dataProcess = MagicMock()
-        instance.previewProcess = MagicMock()
+        instance.read_registers_dict = MagicMock()
+        instance.data_process = MagicMock()
+        instance.preview_process = MagicMock()
         instance.do_not_save_event.is_set = MagicMock(return_value=True)
         fake_pipeline = MagicMock()
         fake_pipeline.make_receiver_queue.return_value = MagicMock()
         fake_pipeline.make_receiver_process.return_value = None
-        fake_pipeline.make_data_preprocess.return_value = instance.dataProcess
-        fake_pipeline.make_acquisition_loop.return_value = instance.previewProcess
+        fake_pipeline.make_data_preprocess.return_value = instance.data_process
+        fake_pipeline.make_acquisition_loop.return_value = instance.preview_process
         instance.detector_pipeline = fake_pipeline
 
         with patch("brighteyes_mcs.acquisition.manager.create_detector_pipeline", return_value=fake_pipeline):
             instance.run()
 
-        instance.dataProcess.start.assert_called()
-        instance.previewProcess.start.assert_called()
+        instance.data_process.start.assert_called()
+        instance.preview_process.start.assert_called()
 
     def test_stopAcquisition_stops_dataProcess(self):
         instance = McsManager()
-        instance.dataProcess = MagicMock()
+        instance.data_process = MagicMock()
 
-        instance.stopAcquisition()
+        instance.stop_acquisition()
 
-        instance.dataProcess.stop.assert_called()
+        instance.data_process.stop.assert_called()
 
     def test_stopPreview_stops_previewProcess(self):
         instance = McsManager()
-        instance.previewProcess = MagicMock()
+        instance.preview_process = MagicMock()
 
-        instance.stopPreview()
+        instance.stop_preview()
 
-        instance.previewProcess.stop.assert_called()
-        instance.previewProcess.join.assert_called()
+        instance.preview_process.stop.assert_called()
+        instance.preview_process.join.assert_called()
 
     def test_getPreviewImage_returns_correct_array(self):
         instance = McsManager()
@@ -384,7 +384,7 @@ class TestMcsManager(unittest.TestCase):
         instance.shared_image_xy.get_numpy_handle = MagicMock(return_value=np.array([[1, 2], [3, 4]]))
         instance.shared_image_xy.get_lock = MagicMock()
 
-        result = instance.getPreviewImage()
+        result = instance.get_preview_image()
 
         self.assertTrue((result == np.array([[1, 2], [3, 4]])).all())
 
@@ -419,8 +419,8 @@ class TestMcsManager(unittest.TestCase):
             )
         )
 
-        trace, trace_pos = instance.getTrace()
-        dfd_trace = instance.getDfdTrace()
+        trace, trace_pos = instance.get_trace()
+        dfd_trace = instance.get_dfd_trace()
 
         self.assertEqual(trace_pos, 0)
         np.testing.assert_allclose(trace[0], np.array([0.0, 10e-6, 20e-6, 30e-6]))

@@ -19,9 +19,7 @@ REQUIRED_FPGA_CONTROL_REGISTERS = frozenset(
 
 def validate_fpga_interface(available_registers, available_fifos, required_fifos):
     """Reject a bitfile that does not expose the interface used by the app."""
-    missing_registers = sorted(
-        REQUIRED_FPGA_CONTROL_REGISTERS.difference(available_registers)
-    )
+    missing_registers = sorted(REQUIRED_FPGA_CONTROL_REGISTERS.difference(available_registers))
     missing_fifos = sorted(set(required_fifos).difference(available_fifos))
     if not missing_registers and not missing_fifos:
         return
@@ -37,7 +35,8 @@ def validate_fpga_interface(available_registers, available_fifos, required_fifos
         + ")."
     )
 
-def emptyQueue(queue):
+
+def empty_queue(queue):
     while not queue.empty():
         _ = queue.get()
 
@@ -59,12 +58,12 @@ class FpgaHandleProcess(mp.Process):
         self.stop_event = self.configuration["stop_event"]
         self.stop_done_event = self.configuration["stop_done_event"]
         self.print_event = self.configuration["print_event"]
-        # self.queueRegisterWrite = self.configuration['queueRegisterWrite']
-        # self.queueRegisterReadReq = self.configuration['queueRegisterReadReq']
-        # self.queueRegisterRead = self.configuration['queueRegisterRead']
-        self.queueFifoWrite = self.configuration["queueFifoWrite"]
-        self.queueFifoReadReq = self.configuration["queueFifoReadReq"]
-        self.queueFifoRead = self.configuration["queueFifoRead"]
+        # self.queue_register_write = self.configuration['queueRegisterWrite']
+        # self.queue_register_read_request = self.configuration['queueRegisterReadReq']
+        # self.queue_register_read = self.configuration['queueRegisterRead']
+        self.queue_fifo_write = self.configuration["queueFifoWrite"]
+        self.queue_fifo_read_request = self.configuration["queueFifoReadReq"]
+        self.queue_fifo_read = self.configuration["queueFifoRead"]
         self.is_connected = self.configuration["is_connected"]
         self.is_readytorun = self.configuration["is_readytorun"]
         self.initialization_error = self.configuration["initialization_error"]
@@ -72,9 +71,7 @@ class FpgaHandleProcess(mp.Process):
         self.actual_fifo_depth = self.configuration["actual_fifo_depth"]
         self.fpgarunning = self.configuration["fpgarunning"]
         self.fpga_started = self.configuration["fpga_started"]
-        self.list_fifos_to_read_continously = self.configuration[
-            "list_fifos_to_read_continously"
-        ]
+        self.list_fifos_to_read_continously = self.configuration["list_fifos_to_read_continously"]
 
         self.fifo_chuck_size_digital = self.configuration["fifo_chuck_size_digital"]
         self.fifo_chuck_size_analog = self.configuration["fifo_chuck_size_analog"]
@@ -100,7 +97,7 @@ class FpgaHandleProcess(mp.Process):
         self.use_rust_fifo = use_rust_fifo
         self.rust_reader_ready = mp.Event()
         self.detector_source_ready = mp.Event()
-        
+
         self.fpgarunning_internal = False
         logger.debug("%s %s", self.process_label, "INIT done")
 
@@ -111,14 +108,13 @@ class FpgaHandleProcess(mp.Process):
             from ..fifo import RustFastFifoReader
 
             try:
-
                 self.rust_fifo_reader = RustFastFifoReader(
                     self.bitfile,
                     self.list_fifos,
                     self.fifo_chuck_size_digital.value,
                     self.fifo_chuck_size_analog.value,
                     self.requested_fifo_depth,
-                    self.ni_address
+                    self.ni_address,
                 )
                 self.rust_reader_ready.set()
 
@@ -131,24 +127,23 @@ class FpgaHandleProcess(mp.Process):
 
                 self.stop_event.set()
 
-
         while not self.stop_event.is_set():
             if self.fpgarunning.is_set() and not self.fpgarunning_internal:
                 self.nifpga_session.run()
                 self.fpgarunning_internal = True
                 self.fpga_started.set()
                 logger.debug("%s %s", self.process_label, "nifpga_session.run()")
-                self.fpgarunning.clear()                
+                self.fpgarunning.clear()
         logger.debug("self.stop_event.is_set()")
 
         if self._uses_rust_fifo_reader():
             self.rust_reader_ready.clear()
             self.rust_fifo_reader.close()
 
-    def loop_writeReg(self):
+    def loop_write_register(self):
         while not self.stop_event.is_set():
-            if not self.queueRegisterWrite.empty():
-                command = self.queueRegisterWrite.get()
+            if not self.queue_register_write.empty():
+                command = self.queue_register_write.get()
 
                 for current_register in command:
                     try:
@@ -156,45 +151,66 @@ class FpgaHandleProcess(mp.Process):
                             command[current_register]
                         )
                     except Exception as e:
-                        logger.debug("%s %s %s %s %s", "self.queueRegisterWrite", repr(e), " ERROR", current_register, command[current_register])
+                        logger.debug(
+                            "%s %s %s %s %s",
+                            "self.queueRegisterWrite",
+                            repr(e),
+                            " ERROR",
+                            current_register,
+                            command[current_register],
+                        )
                         try:
-                            logger.debug("%s %s %s", "self.queueRegisterWrite SECOND ATTEMPT", current_register, command[current_register])
+                            logger.debug(
+                                "%s %s %s",
+                                "self.queue_register_write SECOND ATTEMPT",
+                                current_register,
+                                command[current_register],
+                            )
                             self.nifpga_session.registers[current_register].write(
                                 command[current_register]
                             )
                         except Exception as e:
-                            logger.debug("%s %s %s %s %s", "self.queueRegisterWrite 2nd attempt", repr(e), " ERROR", current_register, command[current_register])
+                            logger.debug(
+                                "%s %s %s %s %s",
+                                "self.queue_register_write 2nd attempt",
+                                repr(e),
+                                " ERROR",
+                                current_register,
+                                command[current_register],
+                            )
         logger.debug("self.stop_event.is_set()")
 
-    def loop_readReq(self):
+    def loop_read_request(self):
         while not self.stop_event.is_set():
-            if not self.queueRegisterReadReq.empty():
+            if not self.queue_register_read_request.empty():
                 out_dict = {}
-                command = self.queueRegisterReadReq.get()
+                command = self.queue_register_read_request.get()
                 for current_register in command:
                     try:
                         out_dict[current_register] = self.nifpga_session.registers[
                             current_register
                         ].read()
                     except Exception as e:
-                        logger.debug("%s %s %s %s", "self.queueRegisterReadReq", repr(e), "ERROR", command)
-                self.queueRegisterRead.put(out_dict)
+                        logger.debug(
+                            "%s %s %s %s", "self.queueRegisterReadReq", repr(e), "ERROR", command
+                        )
+                self.queue_register_read.put(out_dict)
         logger.debug("self.stop_event.is_set()")
 
-    def loop_fifoWrite(self):
+    def loop_fifo_write(self):
         while not self.stop_event.is_set():
-            if not self.queueFifoWrite.empty():
-                command = self.queueFifoWrite.get()
+            if not self.queue_fifo_write.empty():
+                command = self.queue_fifo_write.get()
                 logger.debug("%s %s", "loop_fifoWrite", command)
                 for current_fifo in command:
                     self.nifpga_session.fifos[current_fifo].write(command[current_fifo])
         logger.debug("self.stop_event.is_set()")
 
-    def loop_fifoRead(self):
+    def loop_fifo_read(self):
         while not self.stop_event.is_set():
-            if not self.queueFifoReadReq.empty():
+            if not self.queue_fifo_read_request.empty():
                 out_dict = {}
-                command = self.queueFifoReadReq.get()
+                command = self.queue_fifo_read_request.get()
                 logger.debug(command)
                 for current_fifo in command:
                     if current_fifo == "stream_out_main":
@@ -213,26 +229,24 @@ class FpgaHandleProcess(mp.Process):
                             elements_to_be_read, self.timeout_fifos
                         )
                         length = len(read_data.data)
-                        self.fifo_element_remaining[
-                            current_fifo
-                        ] = read_data.elements_remaining
+                        self.fifo_element_remaining[current_fifo] = read_data.elements_remaining
 
                         if length > 0:
                             out_dict[current_fifo] = [read_data.data, length]
-                            self.queueFifoRead.put_nowait(out_dict)
+                            self.queue_fifo_read.put_nowait(out_dict)
 
                     except nifpga.FifoTimeoutError:
                         pass
         logger.debug("self.stop_event.is_set()")
 
-    def loop_fifoReadContinously(self):
+    def loop_fifo_read_continuously(self):
         while not self.stop_event.is_set():
             temp_list = list(self.list_fifos_to_read_continously)
             if self.fpgarunning_internal and len(temp_list) != 0:
                 out_dict = {}
                 for current_fifo in temp_list:
                     # with self.semaphore:
-                    #     with self.queueFifoRead._rlock:
+                    #     with self.queue_fifo_read._rlock:
                     #         read_data = self.nifpga_session.fifos[current_fifo].read(0, 0)
                     #         if read_data.elements_remaining > 0:
                     # print("E ", read_data.elements_remaining)
@@ -252,26 +266,23 @@ class FpgaHandleProcess(mp.Process):
                             elements_to_be_read, self.timeout_fifos
                         )
                         length = len(read_data.data)
-                        self.fifo_element_remaining[
-                            current_fifo
-                        ] = read_data.elements_remaining
+                        self.fifo_element_remaining[current_fifo] = read_data.elements_remaining
 
                         if length > 0:
                             out_dict[current_fifo] = [read_data.data, length]
-                            self.queueFifoRead.put(out_dict)
-
+                            self.queue_fifo_read.put(out_dict)
 
                     except nifpga.FifoTimeoutError:
                         pass
 
-    def loop_fifoReadContinously(self):
+    def loop_fifo_read_continuously(self):
         while not self.stop_event.is_set():
             temp_list = list(self.list_fifos_to_read_continously)
             if self.fpgarunning_internal and len(temp_list) != 0:
                 out_dict = {}
                 for current_fifo in temp_list:
                     # with self.semaphore:
-                    #     with self.queueFifoRead._rlock:
+                    #     with self.queue_fifo_read._rlock:
                     #         read_data = self.nifpga_session.fifos[current_fifo].read(0, 0)
                     #         if read_data.elements_remaining > 0:
                     # print("E ", read_data.elements_remaining)
@@ -291,20 +302,16 @@ class FpgaHandleProcess(mp.Process):
                             elements_to_be_read, self.timeout_fifos
                         )
                         length = len(read_data.data)
-                        self.fifo_element_remaining[
-                            current_fifo
-                        ] = read_data.elements_remaining
+                        self.fifo_element_remaining[current_fifo] = read_data.elements_remaining
 
                         if length > 0:
                             out_dict[current_fifo] = [read_data.data, length]
-                            self.queueFifoRead.put(out_dict)
-
+                            self.queue_fifo_read.put(out_dict)
 
                     except nifpga.FifoTimeoutError:
                         pass
 
-
-    def loop_fifoReadContinously_Rust(self):
+    def loop_fifo_read_continuously_rust(self):
         while not self.stop_event.is_set():
             temp_list = list(self.list_fifos_to_read_continously)
             if self.fpgarunning_internal and len(temp_list) != 0:
@@ -321,15 +328,13 @@ class FpgaHandleProcess(mp.Process):
 
                         if length > 0:
                             out_dict[current_fifo] = [read_data, length]
-                            self.queueFifoRead.put(out_dict)
+                            self.queue_fifo_read.put(out_dict)
 
         logger.debug("self.stop_event.is_set()")
 
-
-
-    def loop_fifoReadContinously_Rust_fifo(self, current_fifo):
+    def loop_fifo_read_continuously_rust_fifo(self, current_fifo):
         out_dict = {}
-        self.rust_reader_ready.wait() 
+        self.rust_reader_ready.wait()
         while not self.stop_event.is_set():
             current_time = perf_counter_ns()
             delta_time = current_time - self.fifo_last_read_time[current_fifo]
@@ -339,7 +344,7 @@ class FpgaHandleProcess(mp.Process):
                 length = len(read_data)
                 if length > 0:
                     out_dict[current_fifo] = [read_data, length]
-                    self.queueFifoRead.put_nowait(out_dict)
+                    self.queue_fifo_read.put_nowait(out_dict)
         logger.debug("self.stop_event.is_set()")
 
     def _uses_nifpga_fifo(self):
@@ -364,9 +369,7 @@ class FpgaHandleProcess(mp.Process):
             available_registers = set(self.nifpga_session.registers.keys())
             available_fifos = set(self.nifpga_session.fifos.keys())
             required_fifos = (
-                list(self.list_fifos_to_read_continously)
-                if self._uses_nifpga_fifo()
-                else []
+                list(self.list_fifos_to_read_continously) if self._uses_nifpga_fifo() else []
             )
             validate_fpga_interface(
                 available_registers,
@@ -385,8 +388,6 @@ class FpgaHandleProcess(mp.Process):
             self.is_readytorun.set()
 
         if self.is_connected.is_set():
-
-
             self.stop_done_event.clear()
 
             if self._uses_nifpga_fifo():
@@ -413,7 +414,15 @@ class FpgaHandleProcess(mp.Process):
                         )
                         self.nifpga_session.fifos[fifo].configure(self.requested_fifo_depth)
                         self.nifpga_session.fifos[fifo].start()
-                    logger.debug("%s %s %s %s %s %s", "stream_out_main", fifo, "req:", self.requested_fifo_depth, "actual:", self.actual_fifo_depth.value)
+                    logger.debug(
+                        "%s %s %s %s %s %s",
+                        "stream_out_main",
+                        fifo,
+                        "req:",
+                        self.requested_fifo_depth,
+                        "actual:",
+                        self.actual_fifo_depth.value,
+                    )
                     self.fifo_element_remaining[fifo] = 0
             else:
                 self.actual_fifo_depth.value = 0
@@ -433,17 +442,30 @@ class FpgaHandleProcess(mp.Process):
                         self.nifpga_session.registers[register].write(
                             self.initial_registers[register]
                         )
-                    logger.debug("%s %s %s", "initial_registers: ", register, self.initial_registers[register])
+                    logger.debug(
+                        "%s %s %s",
+                        "initial_registers: ",
+                        register,
+                        self.initial_registers[register],
+                    )
                 except Exception as e:
-                    logger.debug("%s %s %s %s %s %s", "initial_registers - self.queueRegisterWrite", repr(e), " ERROR", register, "========", self.initial_registers)
+                    logger.debug(
+                        "%s %s %s %s %s %s",
+                        "initial_registers - self.queueRegisterWrite",
+                        repr(e),
+                        " ERROR",
+                        register,
+                        "========",
+                        self.initial_registers,
+                    )
             logger.debug("initial_registers done")
 
-            # emptyQueue(self.queueRegisterWrite)
-            # emptyQueue(self.queueRegisterReadReq)
-            # emptyQueue(self.queueRegisterRead)
-            emptyQueue(self.queueFifoWrite)
-            emptyQueue(self.queueFifoReadReq)
-            emptyQueue(self.queueFifoRead)
+            # empty_queue(self.queue_register_write)
+            # empty_queue(self.queue_register_read_request)
+            # empty_queue(self.queue_register_read)
+            empty_queue(self.queue_fifo_write)
+            empty_queue(self.queue_fifo_read_request)
+            empty_queue(self.queue_fifo_read)
 
             self.is_readytorun.set()
 
@@ -459,24 +481,29 @@ class FpgaHandleProcess(mp.Process):
             elif self.use_rust_fifo == True:
                 threads = [
                     (Thread(target=self.loop_run_check), "loop_run_check"),
-                    (Thread(target=self.loop_fifoWrite), "loop_fifoWrite"),
-                    #(Thread(target=self.loop_fifoReadContinously_Rust),"loop_fifoReadContinously"),
-                    # (Thread(target=self.loop_fifoReadContinously), "loop_fifoReadContinously"),
-                    # (Thread(target=self.loop_fifoRead), "loop_fifoRead"),  #OLD NOT USED
-                    # (Thread(target=self.loop_writeReg), "loop_writeReg"),  #OLD NOT USED
-                    # (Thread(target=self.loop_readReq), "loop_readReq"),    #OLD NOT USED
+                    (Thread(target=self.loop_fifo_write), "loop_fifoWrite"),
+                    # (Thread(target=self.loop_fifo_read_continuously_rust),"loop_fifoReadContinously"),
+                    # (Thread(target=self.loop_fifo_read_continuously), "loop_fifoReadContinously"),
+                    # (Thread(target=self.loop_fifo_read), "loop_fifoRead"),  #OLD NOT USED
+                    # (Thread(target=self.loop_write_register), "loop_writeReg"),  #OLD NOT USED
+                    # (Thread(target=self.loop_read_request), "loop_readReq"),    #OLD NOT USED
                 ]
                 for fifo in self.list_fifos:
-                    threads.append( (Thread(target=self.loop_fifoReadContinously_Rust_fifo, args=(fifo,)),"loop_fifoReadContinously_Rust_fifo "+fifo))
+                    threads.append(
+                        (
+                            Thread(target=self.loop_fifo_read_continuously_rust_fifo, args=(fifo,)),
+                            "loop_fifoReadContinously_Rust_fifo " + fifo,
+                        )
+                    )
             else:
                 threads = [
                     (Thread(target=self.loop_run_check), "loop_run_check"),
-                    (Thread(target=self.loop_fifoWrite), "loop_fifoWrite"),
-                    (Thread(target=self.loop_fifoReadContinously),"loop_fifoReadContinously"),
-                    # (Thread(target=self.loop_fifoReadContinously), "loop_fifoReadContinously"),
-                    # (Thread(target=self.loop_fifoRead), "loop_fifoRead"),  #OLD NOT USED
-                    # (Thread(target=self.loop_writeReg), "loop_writeReg"),  #OLD NOT USED
-                    # (Thread(target=self.loop_readReq), "loop_readReq"),    #OLD NOT USED
+                    (Thread(target=self.loop_fifo_write), "loop_fifoWrite"),
+                    (Thread(target=self.loop_fifo_read_continuously), "loop_fifoReadContinously"),
+                    # (Thread(target=self.loop_fifo_read_continuously), "loop_fifoReadContinously"),
+                    # (Thread(target=self.loop_fifo_read), "loop_fifoRead"),  #OLD NOT USED
+                    # (Thread(target=self.loop_write_register), "loop_writeReg"),  #OLD NOT USED
+                    # (Thread(target=self.loop_read_request), "loop_readReq"),    #OLD NOT USED
                 ]
 
             for th, name in threads:
@@ -496,7 +523,7 @@ class FpgaHandleProcess(mp.Process):
                 self.rust_fifo_reader.close()
             self.detector_source_ready.clear()
 
-        self.stop_event.set() #in the case fail force it
+        self.stop_event.set()  # in the case fail force it
 
         if self.nifpga_session is not None:
             self.nifpga_session.abort()

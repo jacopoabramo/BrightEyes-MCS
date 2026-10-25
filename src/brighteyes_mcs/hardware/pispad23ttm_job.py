@@ -7,19 +7,26 @@ import uuid
 
 class _Limits(ctypes.Structure):
     _fields_ = [
-        ("process_time", ctypes.c_longlong), ("job_time", ctypes.c_longlong),
-        ("flags", wintypes.DWORD), ("working_min", ctypes.c_size_t),
-        ("working_max", ctypes.c_size_t), ("processes", wintypes.DWORD),
-        ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD),
+        ("process_time", ctypes.c_longlong),
+        ("job_time", ctypes.c_longlong),
+        ("flags", wintypes.DWORD),
+        ("working_min", ctypes.c_size_t),
+        ("working_max", ctypes.c_size_t),
+        ("processes", wintypes.DWORD),
+        ("affinity", ctypes.c_size_t),
+        ("priority", wintypes.DWORD),
         ("scheduling", wintypes.DWORD),
     ]
 
 
 class _ExtendedLimits(ctypes.Structure):
     _fields_ = [
-        ("basic", _Limits), ("io_counters", ctypes.c_ulonglong * 6),
-        ("process_memory", ctypes.c_size_t), ("job_memory", ctypes.c_size_t),
-        ("peak_process_memory", ctypes.c_size_t), ("peak_job_memory", ctypes.c_size_t),
+        ("basic", _Limits),
+        ("io_counters", ctypes.c_ulonglong * 6),
+        ("process_memory", ctypes.c_size_t),
+        ("job_memory", ctypes.c_size_t),
+        ("peak_process_memory", ctypes.c_size_t),
+        ("peak_job_memory", ctypes.c_size_t),
     ]
 
 
@@ -28,7 +35,11 @@ def _kernel():
     for name, args, result in (
         ("CreateJobObjectW", [ctypes.c_void_p, wintypes.LPCWSTR], wintypes.HANDLE),
         ("OpenJobObjectW", [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR], wintypes.HANDLE),
-        ("SetInformationJobObject", [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD], wintypes.BOOL),
+        (
+            "SetInformationJobObject",
+            [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD],
+            wintypes.BOOL,
+        ),
         ("AssignProcessToJobObject", [wintypes.HANDLE, wintypes.HANDLE], wintypes.BOOL),
         ("TerminateJobObject", [wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
         ("GetCurrentProcess", [], wintypes.HANDLE),
@@ -48,7 +59,9 @@ class RecorderJob:
             raise ctypes.WinError(ctypes.get_last_error())
         limits = _ExtendedLimits()
         limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        if not self.kernel.SetInformationJobObject(self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
+        if not self.kernel.SetInformationJobObject(
+            self.handle, 9, ctypes.byref(limits), ctypes.sizeof(limits)
+        ):
             error = ctypes.WinError(ctypes.get_last_error())
             self.close()
             raise error

@@ -6,18 +6,24 @@ from brighteyes_mcs.logging_setup import logger
 
 
 class RustFastFifoReader:
-    def __init__(self, bitfile, list_fifo, chunk_digital=2, chunk_analog=4, requested_fifo_depth=10000, nifpga_addr="RIO0", delay_us=1):
+    def __init__(
+        self,
+        bitfile,
+        list_fifo,
+        chunk_digital=2,
+        chunk_analog=4,
+        requested_fifo_depth=10000,
+        nifpga_addr="RIO0",
+        delay_us=1,
+    ):
         self.fast_fifo_recv_inst = {}
         logger.debug(list_fifo)
-
 
         # Obtaining the signature by using the standard python nifpga library
         self.bitfile_reader = nifpga.Bitfile(bitfile)
         bitfile_signature = self.bitfile_reader.signature
 
-        self.bitfile_fifo_number = {
-            i: n for n, i in enumerate(self.bitfile_reader.fifos.keys())
-        }
+        self.bitfile_fifo_number = {i: n for n, i in enumerate(self.bitfile_reader.fifos.keys())}
 
         for fifo in list_fifo:
             if fifo == "stream_in":
@@ -27,7 +33,7 @@ class RustFastFifoReader:
             fifo_read_buffer_size = (requested_fifo_depth // 8) * 8
             fifo_number = self.bitfile_fifo_number[fifo]
 
-            if fifo=="stream_out_aux":
+            if fifo == "stream_out_aux":
                 delay = delay_us * 20
                 chunk = chunk_analog
             else:
@@ -35,18 +41,18 @@ class RustFastFifoReader:
                 chunk = chunk_digital
 
             configuration = {
-                "bitfile" : bitfile,
-                "signature" : bitfile_signature,
-                "ni_address" : nifpga_addr,
-                "run" : False,
-                "close_on_reset" : True,
-                "fifo" : fifo_number,
-                "dma_read_buffer_size" : dma_read_buffer_size,
-                "fifo_read_buffer_size" : fifo_read_buffer_size,
-                "min_packet" : chunk,
-                "delay_us" : delay,
-                "debug" : False
-                }
+                "bitfile": bitfile,
+                "signature": bitfile_signature,
+                "ni_address": nifpga_addr,
+                "run": False,
+                "close_on_reset": True,
+                "fifo": fifo_number,
+                "dma_read_buffer_size": dma_read_buffer_size,
+                "fifo_read_buffer_size": fifo_read_buffer_size,
+                "min_packet": chunk,
+                "delay_us": delay,
+                "debug": False,
+            }
 
             logger.debug("%s %s %s", "rust NI FIFO reader", fifo, configuration)
 
@@ -61,7 +67,7 @@ class RustFastFifoReader:
                 fifo_reading_buffer=fifo_read_buffer_size,
                 min_packet=chunk,
                 delay_us=delay,
-                debug=False
+                debug=False,
             )
 
             logger.debug("%s %s", "RUST: %s" % fifo, self.fast_fifo_recv_inst[fifo].get_conf())
@@ -73,7 +79,7 @@ class RustFastFifoReader:
         try:
             read_data = self.fast_fifo_recv_inst[fifo].get_data_as_numpy()
         except KeyError as e:
-            return np.array([],np.uint64)
+            return np.array([], np.uint64)
         # debug("read_data", fifo, read_data.shape)
         # read_data = self.fast_fifo_recv_inst[fifo].get_data() #not compatible with nifpga-fast-fifo-recv-0.101.6
         # debug("read_data len:", len(read_data))
@@ -87,8 +93,7 @@ class RustFastFifoReader:
                 self.fast_fifo_recv_inst[i].thread_stop()
                 logger.debug("fast_fifo_recv_inst[%s].thread_stop() done " % i)
             except Exception as e:
-                logger.debug("fast_fifo_recv_inst[%s].thread_stop() already closed(?) %s"
-                    % (i, e))
+                logger.debug("fast_fifo_recv_inst[%s].thread_stop() already closed(?) %s" % (i, e))
 
     def __del__(self):
         for i in self.fast_fifo_recv_inst:
@@ -97,5 +102,4 @@ class RustFastFifoReader:
                 self.fast_fifo_recv_inst[i].thread_stop()
                 logger.debug("fast_fifo_recv_inst[%s].thread_stop() done " % i)
             except Exception as e:
-                logger.debug("fast_fifo_recv_inst[%s].thread_stop() already closed(?) %s"
-                    % (i, e))
+                logger.debug("fast_fifo_recv_inst[%s].thread_stop() already closed(?) %s" % (i, e))

@@ -23,9 +23,13 @@ def open_append(path, *, encoding="utf-8"):
     import win32file
 
     handle = win32file.CreateFile(
-        str(path), ntsecuritycon.FILE_APPEND_DATA | ntsecuritycon.SYNCHRONIZE,
+        str(path),
+        ntsecuritycon.FILE_APPEND_DATA | ntsecuritycon.SYNCHRONIZE,
         win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
-        None, win32con.OPEN_ALWAYS, win32con.FILE_ATTRIBUTE_NORMAL, None,
+        None,
+        win32con.OPEN_ALWAYS,
+        win32con.FILE_ATTRIBUTE_NORMAL,
+        None,
     )
     try:
         descriptor = msvcrt.open_osfhandle(int(handle), os.O_WRONLY | os.O_BINARY)

@@ -39,7 +39,9 @@ def stop_child(child):
     try:
         child.wait(timeout=STOP_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
-        report("Recorder did not stop within 2 seconds; forcing termination. Output may be incomplete.")
+        report(
+            "Recorder did not stop within 2 seconds; forcing termination. Output may be incomplete."
+        )
         try:
             child.kill()
         except OSError as error:
@@ -54,7 +56,9 @@ def stop_watchdog(process, messages):
         return
     except subprocess.TimeoutExpired:
         pass
-    messages.put("Recorder launcher did not stop; forcing its process tree to exit. Output may be incomplete.\n")
+    messages.put(
+        "Recorder launcher did not stop; forcing its process tree to exit. Output may be incomplete.\n"
+    )
     try:
         if os.name == "nt":
             process.recorder_job.terminate()

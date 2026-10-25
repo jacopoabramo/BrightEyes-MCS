@@ -34,13 +34,9 @@ class PluginManager:
         user_plugin_directory: Path | None = None,
     ):
         self.main_window = main_window
-        self.plugin_directory = Path(
-            plugin_directory or resource_path("plugins/builtin")
-        )
+        self.plugin_directory = Path(plugin_directory or resource_path("plugins/builtin"))
         self._user_plugin_directory = (
-            None
-            if user_plugin_directory is None
-            else Path(user_plugin_directory)
+            None if user_plugin_directory is None else Path(user_plugin_directory)
         )
         self.instances: dict[str, dict] = {}
         self._callbacks: dict[str, list[Callable]] = defaultdict(list)
@@ -200,9 +196,7 @@ class PluginManager:
     def _services(self) -> dict:
         return {
             "acquisition": getattr(self.main_window, "mcs_manager", None),
-            "configuration": getattr(
-                self.main_window, "configuration_controller", None
-            ),
+            "configuration": getattr(self.main_window, "configuration_controller", None),
         }
 
 

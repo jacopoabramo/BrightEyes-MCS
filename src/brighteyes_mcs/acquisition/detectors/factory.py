@@ -1,4 +1,9 @@
-from .models import DETECTOR_DISABLED, DETECTOR_PISPAD23_TS_UIMG, detector_uses_pispad23_pipeline, normalize_detector_model
+from .models import (
+    DETECTOR_DISABLED,
+    DETECTOR_PISPAD23_TS_UIMG,
+    detector_uses_pispad23_pipeline,
+    normalize_detector_model,
+)
 from .disabled import DisabledDetectorPipeline
 from .pispad23.pipeline import PISPAD23DetectorPipeline
 from .pispad23.timestamp_pipeline import PISPAD23MicroimagePipeline

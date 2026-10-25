@@ -279,7 +279,7 @@ def test_microimage_preview_displays_worker_buffers_and_fingerprint(ui):
     manager = SimpleNamespace(preview_repository=repository,
         shared_dict={"pispad23_uimg_status": dict(frame=3, frame_dwells=1, recent_dwells=1,
                                            last_frame_dwells=0, total_dwells=1)},
-        getFingerprintSaturation=lambda: repository.get_fingerprint(4))
+        get_fingerprint_saturation=lambda: repository.get_fingerprint(4))
     window = SimpleNamespace(ui=ui, _current_detector_model=lambda: DETECTOR_PISPAD23_TS_UIMG,
         mcs_manager=manager, im_widget=MagicMock(), autoscale_image=True,
         fingerprint_mask=np.ones((5, 5), dtype=np.uint8), fingerprint_visualization=0,
@@ -475,13 +475,13 @@ def test_disconnected_register_settings_are_retained_and_write_errors_propagate(
     manager.detector_model = "SPAD Array"
     manager.is_connected = False
     manager.registers_configuration = {}
-    manager.setRegistersDict({"laser_force_pulsing_enable": True})
+    manager.set_registers_dict({"laser_force_pulsing_enable": True})
     assert manager.registers_configuration["laser_force_pulsing_enable"] is True
     manager.is_connected = True
     manager.fpga_handle = MagicMock()
     manager.fpga_handle.register_write_checked.side_effect = RuntimeError("write failed")
     with pytest.raises(RuntimeError, match="write failed"):
-        manager.setRegistersDict({"laser_force_pulsing_enable": False})
+        manager.set_registers_dict({"laser_force_pulsing_enable": False})
     assert manager.registers_configuration["laser_force_pulsing_enable"] is True
 
 
@@ -489,7 +489,7 @@ def test_requested_controls_are_written_after_vi_start():
     from unittest.mock import call, patch
 
     manager = McsManager.__new__(McsManager)
-    for name in ("bitfile", "niAddr", "bitfile2", "niAddr2"):
+    for name in ("bitfile", "ni_address", "bitfile2", "ni_address2"):
         setattr(manager, name, "")
     manager.detector_model = "SPAD Array"
     manager.mp_manager = MagicMock()

@@ -192,9 +192,9 @@ def test_cold_acquisition_connects_then_resets_fpga_before_first_run():
 
     window.connectFPGA.assert_called_once_with()
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
-    window.mcs_manager.setRegistersDict.assert_any_call({"laser_force_pulsing_enable": True})
-    window.mcs_manager.setRegistersDict.assert_any_call({"laser_time_bin_mode_enable": True, "max_laser_time_bin": 1})
-    assert all("start_command" not in c.args[0] for c in window.mcs_manager.setRegistersDict.call_args_list)
+    window.mcs_manager.set_registers_dict.assert_any_call({"laser_force_pulsing_enable": True})
+    window.mcs_manager.set_registers_dict.assert_any_call({"laser_time_bin_mode_enable": True, "max_laser_time_bin": 1})
+    assert all("start_command" not in c.args[0] for c in window.mcs_manager.set_registers_dict.call_args_list)
 
 
 def test_reused_fpga_is_reset_before_another_run():
@@ -247,8 +247,8 @@ def test_keep_connected_leaves_fpga_loaded_after_idle_reset():
     window.stopAcquisition()
 
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
-    window.mcs_manager.stopFPGA.assert_not_called()
-    window.mcs_manager.stopAcquisition.assert_called_once_with(
+    window.mcs_manager.stop_fpga.assert_not_called()
+    window.mcs_manager.stop_acquisition.assert_called_once_with(
         keep_fpga_loaded=True
     )
 
@@ -260,8 +260,8 @@ def test_unchecked_keep_connected_closes_fpga_after_run():
 
     window.sendCmdStop.assert_not_called()
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
-    window.mcs_manager.stopFPGA.assert_called_once_with()
-    window.mcs_manager.stopAcquisition.assert_called_once_with(
+    window.mcs_manager.stop_fpga.assert_called_once_with()
+    window.mcs_manager.stop_acquisition.assert_called_once_with(
         keep_fpga_loaded=False
     )
 
@@ -273,8 +273,8 @@ def test_automatic_connection_does_not_enable_keep_fpga_on():
     window.stopAcquisition()
 
     window.ui.pushButton_fpga_connection_cmd.setChecked.assert_called_with(False)
-    window.mcs_manager.stopFPGA.assert_called_once_with()
-    window.mcs_manager.stopAcquisition.assert_called_once_with(
+    window.mcs_manager.stop_fpga.assert_called_once_with()
+    window.mcs_manager.stop_acquisition.assert_called_once_with(
         keep_fpga_loaded=False
     )
 
@@ -373,8 +373,8 @@ def test_disconnect_fpga_closes_session_and_releases_button():
     window.disconnectFPGA()
 
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
-    window.mcs_manager.stopFPGA.assert_called_once_with()
-    window.mcs_manager.stopAcquisition.assert_called_once_with(
+    window.mcs_manager.stop_fpga.assert_called_once_with()
+    window.mcs_manager.stop_acquisition.assert_called_once_with(
         keep_fpga_loaded=False
     )
     assert window.mcs_manager.is_connected is False
@@ -477,9 +477,9 @@ def test_window_shutdown_closes_fpga_even_when_quick_reset_fails():
     window.shutdown()
 
     window.mcs_manager.quick_reset_fpga.assert_called_once_with(timeout=5.0)
-    window.mcs_manager.stopPreview.assert_called_once_with()
-    window.mcs_manager.stopAcquisition.assert_called_once_with()
-    window.mcs_manager.stopFPGA.assert_called_once_with()
+    window.mcs_manager.stop_preview.assert_called_once_with()
+    window.mcs_manager.stop_acquisition.assert_called_once_with()
+    window.mcs_manager.stop_fpga.assert_called_once_with()
     assert window._shutdown_complete is True
     assert window.mcs_manager.is_connected is False
 
@@ -495,7 +495,7 @@ def test_window_shutdown_is_idempotent():
     window.shutdown()
     window.shutdown()
 
-    window.mcs_manager.stopFPGA.assert_called_once_with()
+    window.mcs_manager.stop_fpga.assert_called_once_with()
 
 
 def test_fpga_handle_stop_closes_all_sessions_after_an_error():

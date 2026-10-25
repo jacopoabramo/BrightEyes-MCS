@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 import shutil
 import h5py
 
-from brighteyes_mcs.ui.threading import pushButton_multithread_call
+from brighteyes_mcs.ui.threading import run_with_busy_button
 
 from PySide6.QtCore import (
     QThreadPool,
@@ -275,7 +275,7 @@ class DfdWidget(QWidget, dfd_widget_design.Ui_Form):
 
     @Slot()
     def pushButton_ref_load_clicked(self):
-        pushButton_multithread_call(
+        run_with_busy_button(
             self.worker,
             self.threadpool,
             self.pushButton_ref_load,
@@ -341,7 +341,7 @@ class DfdWidget(QWidget, dfd_widget_design.Ui_Form):
         self.tabWidget.setCurrentWidget(self.tabWidget_hist)
 
     def pushButton_meas_load_clicked(self):
-        pushButton_multithread_call(
+        run_with_busy_button(
             self.worker,
             self.threadpool,
             self.pushButton_meas_load,

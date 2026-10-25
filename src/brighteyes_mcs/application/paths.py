@@ -82,7 +82,9 @@ def _legacy_profile(value: str, pointer: Path) -> SystemProfile:
             user_config_dir() / raw_path,
             PACKAGE_ROOT / raw_path,
         ]
-        selected = next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+        selected = next(
+            (candidate for candidate in candidates if candidate.exists()), candidates[0]
+        )
     if selected.suffix.casefold() == ".cfg" or selected.is_file():
         return SystemProfile(
             root=str(selected.parent),
@@ -112,13 +114,9 @@ def load_system_profile(pointer: str | Path | None = None) -> SystemProfile:
         return SystemProfile(
             root=section.get("root", fallback.root).strip(),
             configuration_dir=section.get("configuration_dir", ".").strip(),
-            default_configuration=section.get(
-                "default_configuration", "default.cfg"
-            ).strip(),
+            default_configuration=section.get("default_configuration", "default.cfg").strip(),
             plugins_dir=section.get("plugins_dir", "plugins_cfg").strip(),
-            plugin_packages_dir=section.get(
-                "plugin_packages_dir", "plugins"
-            ).strip(),
+            plugin_packages_dir=section.get("plugin_packages_dir", "plugins").strip(),
             scripts_dir=section.get("scripts_dir", "scripts").strip(),
             bitfiles_dir=section.get("bitfiles_dir", "bitfiles").strip(),
         )
@@ -369,9 +367,7 @@ def ensure_user_configuration() -> Path:
         if not selected.exists():
             shutil.copy2(selected_source, selected)
 
-    write_system_profile(
-        replace(default_system_profile(), default_configuration=selected.name)
-    )
+    write_system_profile(replace(default_system_profile(), default_configuration=selected.name))
     return selected
 
 
