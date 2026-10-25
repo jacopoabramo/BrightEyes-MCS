@@ -44,7 +44,7 @@ from numpy import sqrt
 import numpy as np
 
 
-def decode_pointer_list(pointer_start, gap, timebinsPerPixel, shape, snake_walk_xy=False, snake_walk_z=False,
+def decode_pointer_list(pointer_start, gap, timebins_per_pixel, shape, snake_walk_xy=False, snake_walk_z=False,
                         clk_multiplier=1, delay=0):
     """
     Decode pointer indices into list_b_digital, list_x_digital, list_y_digital, list_z_digital, list_rep_digital.
@@ -55,7 +55,7 @@ def decode_pointer_list(pointer_start, gap, timebinsPerPixel, shape, snake_walk_
         Starting pointer index.
     gap : int
         Number of elements to decode.
-    timebinsPerPixel : int
+    timebins_per_pixel : int
         Number of time bins per pixel.
     shape : tuple
         (X, Y, Z) dimensions.
@@ -73,11 +73,11 @@ def decode_pointer_list(pointer_start, gap, timebinsPerPixel, shape, snake_walk_
     # Pointer decoding expands each FIFO packet into per-sample coordinates; this
     # scales linearly with timebins and is one of the dominant vectorized costs.
     list_pointer = np.arange(pointer_start, pointer_start + gap)
-    list_pointer_shifted = list_pointer + (delay * timebinsPerPixel)
-    list_pixel = list_pointer_shifted // timebinsPerPixel
-    list_b_digital = list_pointer_shifted % timebinsPerPixel
+    list_pointer_shifted = list_pointer + (delay * timebins_per_pixel)
+    list_pixel = list_pointer_shifted // timebins_per_pixel
+    list_b_digital = list_pointer_shifted % timebins_per_pixel
     if clk_multiplier != 1:
-        list_b_digital = list_b_digital % (timebinsPerPixel // clk_multiplier)
+        list_b_digital = list_b_digital % (timebins_per_pixel // clk_multiplier)
     list_x_digital = list_pixel % shape[0]
     list_y_digital = (list_pixel // shape[0]) % shape[1]
 
@@ -95,15 +95,15 @@ def decode_pointer_list(pointer_start, gap, timebinsPerPixel, shape, snake_walk_
     return list_b_digital, list_x_digital, list_y_digital, list_z_digital, list_rep_digital
 
 
-def build_pointer_frame_lookup(timebinsPerPixel, shape, snake_walk_xy=False, snake_walk_z=False, clk_multiplier=1):
+def build_pointer_frame_lookup(timebins_per_pixel, shape, snake_walk_xy=False, snake_walk_z=False, clk_multiplier=1):
     """
     Precompute one frame worth of decoded pointer coordinates.
     """
-    samples_per_frame = int(timebinsPerPixel) * int(shape[0]) * int(shape[1]) * int(shape[2])
+    samples_per_frame = int(timebins_per_pixel) * int(shape[0]) * int(shape[1]) * int(shape[2])
     return decode_pointer_list(
         0,
         samples_per_frame,
-        timebinsPerPixel,
+        timebins_per_pixel,
         shape,
         snake_walk_xy=snake_walk_xy,
         snake_walk_z=snake_walk_z,
@@ -114,7 +114,7 @@ def build_pointer_frame_lookup(timebinsPerPixel, shape, snake_walk_xy=False, sna
 def aggregate_samples_by_pixel(
     pointer_start,
     gap,
-    timebinsPerPixel,
+    timebins_per_pixel,
     shape,
     values,
     frame_lookup=None,
@@ -136,7 +136,7 @@ def aggregate_samples_by_pixel(
     list_b, list_x, list_y, list_z, list_rep = decode_pointer_list(
         pointer_start,
         gap,
-        timebinsPerPixel,
+        timebins_per_pixel,
         shape,
         snake_walk_xy=snake_walk_xy,
         snake_walk_z=snake_walk_z,
@@ -173,32 +173,32 @@ def circular_mean_std(weights):
     k = np.arange(n, dtype=float)
     theta = 2.0 * np.pi * k / n
 
-    C = np.sum(w * np.cos(theta), axis=-1)
-    S = np.sum(w * np.sin(theta), axis=-1)
+    cos_sum = np.sum(w * np.cos(theta), axis=-1)
+    sin_sum = np.sum(w * np.sin(theta), axis=-1)
 
-    theta_mean = np.arctan2(S, C)
+    theta_mean = np.arctan2(sin_sum, cos_sum)
     theta_mean = np.where(theta_mean < 0, theta_mean + 2.0 * np.pi, theta_mean)
     mean_bin = n * theta_mean / (2.0 * np.pi)
 
-    R = np.zeros_like(total, dtype=float)
+    resultant_length = np.zeros_like(total, dtype=float)
     positive = total > 0
-    R[positive] = np.hypot(C[positive], S[positive]) / total[positive]
-    R = np.clip(R, 1e-15, 1.0)
+    resultant_length[positive] = np.hypot(cos_sum[positive], sin_sum[positive]) / total[positive]
+    resultant_length = np.clip(resultant_length, 1e-15, 1.0)
 
-    std_circ = (n / (2.0 * np.pi)) * np.sqrt(-2.0 * np.log(R))
+    std_circ = (n / (2.0 * np.pi)) * np.sqrt(-2.0 * np.log(resultant_length))
 
     d = (k - mean_bin[..., None] + n / 2.0) % n - n / 2.0
     var_wrap = np.zeros_like(total, dtype=float)
     var_wrap[positive] = np.sum(w[positive] * d[positive] ** 2, axis=-1) / total[positive]
     std_wrap = np.sqrt(var_wrap)
 
-    return mean_bin, std_circ, std_wrap, R
+    return mean_bin, std_circ, std_wrap, resultant_length
 
 
 def circular_mean_from_positions(weights, phases):
     """
     weights : (..., M)
-    phases  : (M,) in [0, 1), referred to the full T_cycle
+    phases  : (M,) in [0, 1), referred to the full cycle_period
 
     Returns
     -------
@@ -217,18 +217,18 @@ def circular_mean_from_positions(weights, phases):
     mean_angle = np.mod(np.angle(z), 2.0 * np.pi)
     mean_phase = mean_angle / (2.0 * np.pi)
 
-    R = np.abs(z)
-    std_angle = np.sqrt(np.maximum(0.0, -2.0 * np.log(np.clip(R, 1e-15, 1.0))))
+    resultant_length = np.abs(z)
+    std_angle = np.sqrt(np.maximum(0.0, -2.0 * np.log(np.clip(resultant_length, 1e-15, 1.0))))
     std_phase = std_angle / (2.0 * np.pi)
 
     return mean_phase, std_phase
 
 
-def flim_parameters_from_3samples(d1, d2, d3, T_cycle, sample_idx, peak_idx=None, total_bins=None):
+def flim_parameters_from_3samples(d1, d2, d3, cycle_period, sample_idx, peak_idx=None, total_bins=None):
     """
     Estimate lifetime and quality metrics from three sampled points.
 
-    Tau is returned in T_cycle units, where 1.0 corresponds to one full cycle.
+    Tau is returned in cycle_period units, where 1.0 corresponds to one full cycle.
     Callers that need physical time can convert it afterwards, for example to ns.
     """
     if total_bins is None or total_bins <= 0:
@@ -292,17 +292,17 @@ def lch_to_srgb(l, c, h):
     fz = fy - b / 200.0
 
     # D65 reference white
-    Xn = 95.047
-    Yn = 100.0
-    Zn = 108.883
+    white_x = 95.047
+    white_y = 100.0
+    white_z = 108.883
 
-    X = Xn * _lab_f_inv(fx) / 100.0
-    Y = Yn * _lab_f_inv(fy) / 100.0
-    Z = Zn * _lab_f_inv(fz) / 100.0
+    cie_x = white_x * _lab_f_inv(fx) / 100.0
+    cie_y = white_y * _lab_f_inv(fy) / 100.0
+    cie_z = white_z * _lab_f_inv(fz) / 100.0
 
-    r_lin = 3.2406 * X - 1.5372 * Y - 0.4986 * Z
-    g_lin = -0.9689 * X + 1.8758 * Y + 0.0415 * Z
-    b_lin = 0.0557 * X - 0.2040 * Y + 1.0570 * Z
+    r_lin = 3.2406 * cie_x - 1.5372 * cie_y - 0.4986 * cie_z
+    g_lin = -0.9689 * cie_x + 1.8758 * cie_y + 0.0415 * cie_z
+    b_lin = 0.0557 * cie_x - 0.2040 * cie_y + 1.0570 * cie_z
 
     rgb_lin = np.stack([r_lin, g_lin, b_lin], axis=-1)
 
@@ -384,20 +384,20 @@ class BaseAcquisitionLoopProcess(mp.Process):
         logger.debug("%s %s", self.process_label, "INIT")
         self.shared_objects = shared_objects
 
-        self.DATA_WORDS_PER_SAMPLE_ANALOG = 1
+        self.data_words_per_sample_analog = 1
 
         if spad_channels == 25:
-            logger.debug("%s %s", self.process_label, "using 25-channel normalized preview words -> DATA_WORDS_PER_SAMPLE_DIGITAL = 2")
+            logger.debug("%s %s", self.process_label, "using 25-channel normalized preview words -> data_words_per_sample_digital = 2")
             self.spad_channels = 25
-            self.DATA_WORDS_PER_SAMPLE_DIGITAL = 2
+            self.data_words_per_sample_digital = 2
         elif spad_channels == 49:
-            logger.debug("%s %s", self.process_label, "using 49-channel normalized preview words -> DATA_WORDS_PER_SAMPLE_DIGITAL = 8")
+            logger.debug("%s %s", self.process_label, "using 49-channel normalized preview words -> data_words_per_sample_digital = 8")
             self.spad_channels = 49
-            self.DATA_WORDS_PER_SAMPLE_DIGITAL = 8
+            self.data_words_per_sample_digital = 8
         else:
             logger.debug("%s %s", self.process_label, "found non-standard channel count; falling back to 25-channel normalized preview words")
             self.spad_channels = 25
-            self.DATA_WORDS_PER_SAMPLE_DIGITAL = 2
+            self.data_words_per_sample_digital = 2
 
         self.shm_activated_fifos_list = shared_objects["activated_fifos_list"]
         self.shm_autocorrelation = shared_objects["shared_autocorrelation"]
@@ -427,7 +427,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
         self.compensation_delay_for_snake = shared_objects["compensation_delay_for_snake"]
 
 
-        self.timebinsPerPixel = shared_dict["timebins_per_pixel"] * \
+        self.timebins_per_pixel = shared_dict["timebins_per_pixel"] * \
                                 shared_dict["circ_repetition"] * \
                                 shared_dict["circ_points"]
 
@@ -440,7 +440,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
         self.expected_words_data_per_frame_analog = shared_dict["expected_words_data_per_frame_analog"]
 
         self.dfd_enable = shared_dict["dfd_enable"]
-        self.DFD_nbins = shared_dict["DFD_nbins"]
+        self.dfd_nbins = shared_dict["DFD_nbins"]
 
         self.snake_walk_xy = shared_dict["snake_walk_xy"]
         self.snake_walk_z = shared_dict["snake_walk_z"]
@@ -471,15 +471,15 @@ class BaseAcquisitionLoopProcess(mp.Process):
         self.local_fifo_done = {}
 
         self.trace_reset_event = mp.Event()
-        self.FCS_reset_event = mp.Event()
+        self.fcs_reset_event = mp.Event()
 
         self.preview_buffer_capacity_samples_digital = shared_dict["preview_buffer_capacity_samples"]  # 15000
         self.preview_buffer_capacity_samples_analog = self.preview_buffer_capacity_samples_digital
 
         # Buffer sizes grow with both preview depth and timebins-per-pixel, so
         # large DFD/high-sample-rate scans can multiply memory pressure quickly.
-        self.buffer_size_in_words_digital = self.timebinsPerPixel * self.preview_buffer_capacity_samples_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL
-        self.buffer_size_in_words_analog = self.timebinsPerPixel * self.preview_buffer_capacity_samples_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG
+        self.buffer_size_in_words_digital = self.timebins_per_pixel * self.preview_buffer_capacity_samples_digital * self.data_words_per_sample_digital
+        self.buffer_size_in_words_analog = self.timebins_per_pixel * self.preview_buffer_capacity_samples_analog * self.data_words_per_sample_analog
 
         if self.spad_channels == 25:
             self.buffer_digital = np.zeros((self.buffer_size_in_words_digital, 25 + 2), dtype=np.uint64)
@@ -519,7 +519,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
         stop_event_proxy = threading.Event()
         trace_reset_event_proxy = threading.Event()
-        FCS_reset_event_proxy = threading.Event()
+        fcs_reset_event_proxy = threading.Event()
 
         def thread_update_event_proxy(mp_event, threading_event):
             threading_event.clear()
@@ -537,7 +537,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                          daemon=True).start()
         threading.Thread(target=thread_update_event_proxy, args=(self.trace_reset_event, trace_reset_event_proxy),
                          daemon=True).start()
-        threading.Thread(target=thread_update_event_proxy, args=(self.FCS_reset_event, FCS_reset_event_proxy),
+        threading.Thread(target=thread_update_event_proxy, args=(self.fcs_reset_event, fcs_reset_event_proxy),
                          daemon=True).start()
 
         if VIZTRACER_ON: self.tracer = VizTracer(log_func_with_objprint=True)
@@ -553,8 +553,8 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
         if not self.software_trigger_enabled:
             stop_event_proxy.clear()
-        self.current_pointer_in_sample_digital = 0  # self.timebinsPerPixel * self.DATA_WORDS_PER_SAMPLE_DIGITAL
-        self.current_pointer_in_sample_analog = 0  # self.timebinsPerPixel * self.DATA_WORDS_PER_SAMPLE_ANALOG
+        self.current_pointer_in_sample_digital = 0  # self.timebins_per_pixel * self.data_words_per_sample_digital
+        self.current_pointer_in_sample_analog = 0  # self.timebins_per_pixel * self.data_words_per_sample_analog
 
         self.current_frame_digital = 0
         self.current_frame_analog = 0
@@ -594,13 +594,13 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
         selected_channel = self.shared_dict["channel"]
         correlator = Autocorrelator(maxx=self.autocorrelation_maxx, log_step=2)
-        temporalBinner = timeBinner(
+        temporal_binner = timeBinner(
             bins=self.trace_bins, sample_per_bins=self.trace_sample_per_bins
         )
 
         # in h5file the first dimension as "free size" is the fastest way to write on disk
         # if self.dfd_enable:
-        #     self.timebinsPerPixel = self.DFD_nbins
+        #     self.timebins_per_pixel = self.dfd_nbins
 
         if not self.do_not_save:
             self.h5mgr = H5ManagerProcessClient(
@@ -616,12 +616,12 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
             if "stream_out_main" in self.shm_activated_fifos_list:
                 self.h5mgr.init_dataset(
-                    "data", self.shape, self.timebinsPerPixel // self.clk_multiplier, self.spad_channels, np.uint16
+                    "data", self.shape, self.timebins_per_pixel // self.clk_multiplier, self.spad_channels, np.uint16
                 )
                 self.h5mgr.init_dataset(
                     "data_channels_extra",
                     self.shape,
-                    self.timebinsPerPixel // self.clk_multiplier, # clk_multiplier can be != 1 only when DFD is active
+                    self.timebins_per_pixel // self.clk_multiplier, # clk_multiplier can be != 1 only when DFD is active
                     self.channels_extra,
                     np.uint8,
                 )
@@ -629,7 +629,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                 self.h5mgr.init_dataset(
                     "data_analog",
                     self.shape,
-                    self.timebinsPerPixel, # Do not make sense clk multiplier in analog situation
+                    self.timebins_per_pixel, # Do not make sense clk multiplier in analog situation
                     self.channels_analog,
                     np.int32,
                 )
@@ -639,7 +639,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                 (
                     self.shape[1],
                     self.shape[0],
-                    self.timebinsPerPixel // self.clk_multiplier,  # clk_multiplier can be != 1 only when DFD is active
+                    self.timebins_per_pixel // self.clk_multiplier,  # clk_multiplier can be != 1 only when DFD is active
                     self.spad_channels,
                 ),
                 dtype="uint16",
@@ -649,7 +649,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                 (
                     self.shape[1],
                     self.shape[0],
-                    self.timebinsPerPixel // self.clk_multiplier, # clk_multiplier can be != 1 only when DFD is active
+                    self.timebins_per_pixel // self.clk_multiplier, # clk_multiplier can be != 1 only when DFD is active
                     self.channels_extra,
                 ),
                 dtype="uint8",
@@ -659,7 +659,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                 (
                     self.shape[1],
                     self.shape[0],
-                    self.timebinsPerPixel, # Do not make sense clk multiplier in analog situation
+                    self.timebins_per_pixel, # Do not make sense clk multiplier in analog situation
                     self.channels_analog,
                 ),
                 dtype="int32",
@@ -692,17 +692,17 @@ class BaseAcquisitionLoopProcess(mp.Process):
         logger.debug("%s %s %s", "correlator:", correlator.get_delays(), self.time_resolution)
         self.autocorrelation[1, :] = 0
 
-        self.trace[0, :] = temporalBinner.get_x()
+        self.trace[0, :] = temporal_binner.get_x()
         self.trace[1, :] = 0
-        self.trace_dfd[0, :] = np.arange(self.DFD_nbins, dtype=np.int64)
+        self.trace_dfd[0, :] = np.arange(self.dfd_nbins, dtype=np.int64)
         self.trace_dfd[1, :] = 0
         self.trace_dfd[2, :] = 0
 
         self.gap_digital_in_sample = 0
         self.gap_analog_in_sample = 0
 
-        # create a dictionary for the frameComplete={"stream_out_main": False, "stream_out_aux": False})
-        frameComplete = dict((name, False) for name in self.shm_activated_fifos_list)
+        # create a dictionary for the frame_complete={"stream_out_main": False, "stream_out_aux": False})
+        frame_complete = dict((name, False) for name in self.shm_activated_fifos_list)
 
         internal_buffer_digital = (
             None  # This buffer is used only when the data cross two frames
@@ -740,9 +740,9 @@ class BaseAcquisitionLoopProcess(mp.Process):
         self.selected_channel = self.shared_dict["channel"]
 
         def update_trace(trace_values, time_bins=None):
-            temporalBinner.add(trace_values)
-            self.trace_pos.value = temporalBinner.get_current_position_bins()
-            self.trace[1, :] = temporalBinner.get_bins()
+            temporal_binner.add(trace_values)
+            self.trace_pos.value = temporal_binner.get_current_position_bins()
+            self.trace[1, :] = temporal_binner.get_bins()
 
             if self.dfd_enable and time_bins is not None:
                 valid = (time_bins >= 0) & (time_bins < self.trace_dfd.shape[1])
@@ -758,7 +758,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                     self.trace_dfd[2, :] = 0
 
                 # reset and finalize fingerprints (same block as original)
-                frameComplete["stream_out_main"] = False
+                frame_complete["stream_out_main"] = False
                 self.fingerprint[3, :, :] = self.fingerprint[0, :, :]
                 self.fingerprint[0, :, :] = 0
                 self.fingerprint[1, :, :] = 0
@@ -794,7 +794,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                     self.buffer_for_save_digital[:] = 0
                     self.buffer_for_save_digital_extra_ch[:] = 0
                     logger.debug("done digital add_to_dataset")
-                    logger.debug(self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)
+                    logger.debug(self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)
                 if self.software_trigger_enabled:
                     # This acknowledgement must reach the GUI even when the
                     # worker exits before its periodic status publication.
@@ -805,7 +805,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
         def finalize_frame_fifo_analog():
             logger.debug("finalize_frame_fifo_analog()")
             try:
-                frameComplete["stream_out_aux"] = False
+                frame_complete["stream_out_aux"] = False
 
                 current_z_analog = (self.current_frame_analog - 1) % self.shape[2]
                 current_rep_analog = (self.current_frame_analog - 1) // self.shape[2]
@@ -828,7 +828,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                     )
                     self.buffer_analog_for_save[:] = 0
                     logger.debug("done analog add_to_dataset")
-                    logger.debug("%s %s", self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG, self.expected_words_data_analog)
+                    logger.debug("%s %s", self.current_pointer_in_sample_analog * self.data_words_per_sample_analog, self.expected_words_data_analog)
                 if self.software_trigger_enabled:
                     self.shared_dict["software_trigger_frames_stream_out_aux"] = self.current_frame_analog
             except Exception as e:
@@ -851,27 +851,27 @@ class BaseAcquisitionLoopProcess(mp.Process):
                 )
 
                 if not self.data_queue["stream_out_main"].empty():
-                    remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)
+                    remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)
 
                     # handle previously split buffer first
                     if (
                             internal_buffer_digital is not None and internal_buffer_digital.size != 0
                     ):  # if the previous queue data was between two frames
 
-                        logger.debug("%s %s %s %s", len(internal_buffer_digital), remaining_digital_in_words, max_gap_frame_digital_in_words, self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)
+                        logger.debug("%s %s %s %s", len(internal_buffer_digital), remaining_digital_in_words, max_gap_frame_digital_in_words, self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)
                         # if remaining_digital_in_words <= 0 means we already completed the frame before consuming internal_buffer_digital
                         if remaining_digital_in_words < 0:
                             logger.debug("%s %s", "THIS IS DEEPLY WRONG!! remaining_digital_in_words < 0, ", remaining_digital_in_words)
 
                         elif remaining_digital_in_words == 0:
-                            frameComplete["stream_out_main"] = True
+                            frame_complete["stream_out_main"] = True
                             self.current_frame_digital += 1
                             max_gap_frame_digital_in_words = self.expected_words_data_per_frame_digital * (self.current_frame_digital + 1)
-                            remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)
+                            remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)
                         #if
                         elif remaining_digital_in_words > 0:
                             data_from_queue_digital = internal_buffer_digital[: remaining_digital_in_words]
-                            self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.DATA_WORDS_PER_SAMPLE_DIGITAL
+                            self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.data_words_per_sample_digital
                             internal_buffer_digital = internal_buffer_digital[remaining_digital_in_words:]
                         else:
                             # remaining_digital_in_words still zero (rare): put nothing to decode here
@@ -884,19 +884,19 @@ class BaseAcquisitionLoopProcess(mp.Process):
                         data_from_queue_digital = self.normalize_digital_payload(
                             self.data_queue["stream_out_main"].get()
                         )
-                        self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.DATA_WORDS_PER_SAMPLE_DIGITAL
+                        self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.data_words_per_sample_digital
 
                         # recalc remaining_digital_in_words because current_frame_digital might have changed above
-                        remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)
+                        remaining_digital_in_words = max_gap_frame_digital_in_words - (self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)
 
                         if remaining_digital_in_words == 0:
                             # nothing left in this frame: finalize it
-                            frameComplete["stream_out_main"] = True
+                            frame_complete["stream_out_main"] = True
                             self.current_frame_digital += 1
                             # push the whole packet to next frame (store for next iteration)
                             internal_buffer_digital = data_from_queue_digital  # push entire packet to next frame
                             # advance pointer to end of last frame, so stop condition can be satisfied
-                            self.current_pointer_in_sample_digital = max_gap_frame_digital_in_words // self.DATA_WORDS_PER_SAMPLE_DIGITAL
+                            self.current_pointer_in_sample_digital = max_gap_frame_digital_in_words // self.data_words_per_sample_digital
                             self.gap_digital_in_sample = 0
                             # run finalize immediately to keep state consistent (we didn't process any buffer_up_to_gap_digital)
                             finalize_frame_fifo()
@@ -904,20 +904,20 @@ class BaseAcquisitionLoopProcess(mp.Process):
                             data_from_queue_digital = None
                         else:
                             # normal split case: packet crosses frame boundary
-                            if (self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.DATA_WORDS_PER_SAMPLE_DIGITAL >= max_gap_frame_digital_in_words:
-                                logger.debug(f"(self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.DATA_WORDS_PER_SAMPLE_DIGITAL = {(self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.DATA_WORDS_PER_SAMPLE_DIGITAL}, "
+                            if (self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.data_words_per_sample_digital >= max_gap_frame_digital_in_words:
+                                logger.debug(f"(self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.data_words_per_sample_digital = {(self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.data_words_per_sample_digital}, "
                                     f"self.gap_digital_in_sample = {self.gap_digital_in_sample}, "
                                     f"max_gap_frame_digital_in_words = {max_gap_frame_digital_in_words}")
 
                                 logger.debug(f"data_from_queue_digital.shape = {data_from_queue_digital.shape}, "
                                     f"remaining_digital_in_words = {remaining_digital_in_words}, "
-                                    f"(self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL) = {(self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL)}")
+                                    f"(self.current_pointer_in_sample_digital * self.data_words_per_sample_digital) = {(self.current_pointer_in_sample_digital * self.data_words_per_sample_digital)}")
 
                                 internal_buffer_digital = data_from_queue_digital[remaining_digital_in_words:]
                                 data_from_queue_digital = data_from_queue_digital[:remaining_digital_in_words]
-                                self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.DATA_WORDS_PER_SAMPLE_DIGITAL
+                                self.gap_digital_in_sample = data_from_queue_digital.shape[0] // self.data_words_per_sample_digital
 
-                                frameComplete["stream_out_main"] = True
+                                frame_complete["stream_out_main"] = True
 
                                 self.current_frame_digital += 1
 
@@ -926,8 +926,8 @@ class BaseAcquisitionLoopProcess(mp.Process):
                         internal_buffer_digital = None
 
                     # safety: if we would exceed expected_words_data_digital, truncate gap
-                    if self.expected_words_data_digital < (self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.DATA_WORDS_PER_SAMPLE_DIGITAL:
-                        self.gap_digital_in_sample = max_gap_frame_digital_in_words // self.DATA_WORDS_PER_SAMPLE_DIGITAL - self.current_pointer_in_sample_digital
+                    if self.expected_words_data_digital < (self.current_pointer_in_sample_digital + self.gap_digital_in_sample) * self.data_words_per_sample_digital:
+                        self.gap_digital_in_sample = max_gap_frame_digital_in_words // self.data_words_per_sample_digital - self.current_pointer_in_sample_digital
                         logger.debug("MISTERY!!!")
                         logger.debug("%s %s", "New GAP", self.gap_digital_in_sample)
 
@@ -939,7 +939,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                         list_b_digital, list_x_digital, list_y_digital, list_z_digital, list_rep_digital = decode_pointer_list(
                             self.current_pointer_in_sample_digital,
                             self.gap_digital_in_sample,
-                            self.timebinsPerPixel,
+                            self.timebins_per_pixel,
                             self.shape,
                             snake_walk_xy=self.snake_walk_xy,
                             snake_walk_z=self.snake_walk_z,
@@ -951,7 +951,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
                         if self.gap_digital_in_sample == 0:
                             logger.debug("self.gap_digital_in_sample = 0")
-                        if self.gap_digital_in_sample * self.DATA_WORDS_PER_SAMPLE_DIGITAL > self.buffer_size_in_words_digital:
+                        if self.gap_digital_in_sample * self.data_words_per_sample_digital > self.buffer_size_in_words_digital:
                             logger.debug("%s %s %s %s", "ERROR: Too many data larger than the buffer. GAP", self.gap_digital_in_sample, "buffer_size_in_words_digital", self.buffer_size_in_words_digital)
 
                         self.saturation[:] = 0
@@ -961,7 +961,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                 converter(
                                     data = data_from_queue_digital,
                                     start = 0,
-                                    stop = self.gap_digital_in_sample * self.DATA_WORDS_PER_SAMPLE_DIGITAL,
+                                    stop = self.gap_digital_in_sample * self.data_words_per_sample_digital,
                                     buffer_out = self.buffer_digital,
                                     buffer_sum = self.spad_channel_sum_buffer,
                                     fingerprint_saturation = self.saturation,
@@ -1086,9 +1086,9 @@ class BaseAcquisitionLoopProcess(mp.Process):
                             ):
                                 if selected_channel.startswith("RGB "):
                                     if self.activate_show_preview == True:
-                                        channelA = int(selected_channel.split(" ")[1])
-                                        channelB = int(selected_channel.split(" ")[2])
-                                        channelC = int(selected_channel.split(" ")[3])
+                                        channel_a = int(selected_channel.split(" ")[1])
+                                        channel_b = int(selected_channel.split(" ")[2])
+                                        channel_c = int(selected_channel.split(" ")[3])
 
                                         self.image_xy_rgb_lock.acquire()
                                         if not accumulate_preview_photons:
@@ -1101,17 +1101,17 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                         np.add.at(
                                             self.image_xy_rgb[:, :, 0],
                                             (list_y_digital, list_x_digital),
-                                            buffer_up_to_gap_digital[:, channelA],
+                                            buffer_up_to_gap_digital[:, channel_a],
                                         )
                                         np.add.at(
                                             self.image_xy_rgb[:, :, 1],
                                             (list_y_digital, list_x_digital),
-                                            buffer_up_to_gap_digital[:, channelB],
+                                            buffer_up_to_gap_digital[:, channel_b],
                                         )
                                         np.add.at(
                                             self.image_xy_rgb[:, :, 2],
                                             (list_y_digital, list_x_digital),
-                                            buffer_up_to_gap_digital[:, channelC],
+                                            buffer_up_to_gap_digital[:, channel_c],
                                         )
                                         self.image_xy_rgb_lock.release()
                                 if selected_channel.startswith("RGB2"):
@@ -1183,7 +1183,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                         self.image_xy_rgb[list_y_digital, list_x_digital, 2] = 0
 
                                     tparts = 3
-                                    tbins = self.timebinsPerPixel
+                                    tbins = self.timebins_per_pixel
                                     gbins = tbins // tparts
 
                                     if self.spad_channel_sum_buffer.shape[0] > 2:
@@ -1224,7 +1224,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                     )
                                 ):
                                     tparts = 3
-                                    tbins = max(self.timebinsPerPixel // max(clk_multiplier, 1), 1)
+                                    tbins = max(self.timebins_per_pixel // max(clk_multiplier, 1), 1)
                                     gbins = max(tbins // tparts, 1)
 
                                     self.image_xy_rgb_lock.acquire()
@@ -1273,7 +1273,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                     chunk_starts = np.array([0.0, float(gbins), float(2 * gbins)], dtype=float)
                                     sample_idx = chunk_starts + 0.5 * np.maximum(chunk_lengths - 1.0, 0.0)
 
-                                    T_cycle = 1.0 / (
+                                    cycle_period = 1.0 / (
                                         max(float(self.dfd_cycle_mhz), 1e-12)
                                         * max(clk_multiplier, 1)
                                     )
@@ -1284,10 +1284,10 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                         d1,
                                         d2,
                                         d3,
-                                        T_cycle=T_cycle,
+                                        cycle_period=cycle_period,
                                         sample_idx=sample_idx,
                                         peak_idx=peak_idx,
-                                        total_bins=self.DFD_nbins,
+                                        total_bins=self.dfd_nbins,
                                     )
                                     h, c, l = flim_map_to_hcl(
                                         tau,
@@ -1397,7 +1397,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                             self.shm_loc_previewed["stream_out_main"].value = self.current_pointer_in_sample_digital
                             # debug(self.current_pointer_in_sample_digital*2, self.gap_digital_in_sample*2, (self.current_pointer_in_sample_digital + self.gap_digital_in_sample)*2)
 
-                            if frameComplete["stream_out_main"]:
+                            if frame_complete["stream_out_main"]:
                                 # we still run the same finalization here for the normal path
                                 finalize_frame_fifo()
 
@@ -1408,7 +1408,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
                 )
                 if not self.data_queue["stream_out_aux"].empty():
-                    remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG)
+                    remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.data_words_per_sample_analog)
 
                     if (
                             internal_buffer_analog is not None and internal_buffer_analog.size != 0
@@ -1418,14 +1418,14 @@ class BaseAcquisitionLoopProcess(mp.Process):
                             logger.debug("%s %s", "THIS IS DEEPLY WRONG!! remaining_analog_in_words < 0, ", remaining_analog_in_words)
 
                         elif remaining_analog_in_words == 0:
-                            frameComplete["stream_out_aux"] = True
+                            frame_complete["stream_out_aux"] = True
                             self.current_frame_analog += 1
                             max_gap_frame_analog_in_words = self.expected_words_data_per_frame_analog * (self.current_frame_analog + 1)
-                            remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG)
+                            remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.data_words_per_sample_analog)
                         # if
                         elif remaining_analog_in_words > 0:
                             data_from_queue_analog = internal_buffer_analog[: remaining_analog_in_words]
-                            self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.DATA_WORDS_PER_SAMPLE_ANALOG
+                            self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.data_words_per_sample_analog
                             internal_buffer_analog = internal_buffer_analog[remaining_analog_in_words:]
                         else:
                             data_from_queue_analog = None
@@ -1434,46 +1434,46 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
                     if internal_buffer_analog is None:
                         data_from_queue_analog = self.data_queue["stream_out_aux"].get()
-                        self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.DATA_WORDS_PER_SAMPLE_ANALOG
+                        self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.data_words_per_sample_analog
 
                         # recompute remaining_analog_in_words (current_frame_analog could have changed)
-                        remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG)
+                        remaining_analog_in_words = max_gap_frame_analog_in_words - (self.current_pointer_in_sample_analog * self.data_words_per_sample_analog)
 
                         if remaining_analog_in_words == 0:
                             # nothing left in this analog frame
-                            frameComplete["stream_out_aux"] = True
+                            frame_complete["stream_out_aux"] = True
                             self.current_frame_analog += 1
                             # push whole analog packet to next frame
                             internal_buffer_analog = data_from_queue_analog  # CORRECT: use analog variable
                             # advance analog pointer to frame boundary so stopping condition can be reached
-                            self.current_pointer_in_sample_analog = max_gap_frame_analog_in_words // self.DATA_WORDS_PER_SAMPLE_ANALOG
+                            self.current_pointer_in_sample_analog = max_gap_frame_analog_in_words // self.data_words_per_sample_analog
                             self.gap_analog_in_sample = 0
                             # finalize analog frame now
                             finalize_frame_fifo_analog()
                             data_from_queue_analog = None
                         else:
-                            if (self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.DATA_WORDS_PER_SAMPLE_ANALOG >= max_gap_frame_analog_in_words:
-                                logger.debug(f"(self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.DATA_WORDS_PER_SAMPLE_ANALOG = {(self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.DATA_WORDS_PER_SAMPLE_ANALOG}, "
+                            if (self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.data_words_per_sample_analog >= max_gap_frame_analog_in_words:
+                                logger.debug(f"(self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.data_words_per_sample_analog = {(self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.data_words_per_sample_analog}, "
                                     f"self.gap_analog_in_sample = {self.gap_analog_in_sample}, "
                                     f"max_gap_frame_analog_in_words = {max_gap_frame_analog_in_words}")
 
                                 logger.debug(f"data_from_queue_analog.shape = {data_from_queue_analog.shape}, "
                                     f"remaining_analog_in_words = {remaining_analog_in_words}, "
-                                    f"(self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG) = {(self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG)}")
+                                    f"(self.current_pointer_in_sample_analog * self.data_words_per_sample_analog) = {(self.current_pointer_in_sample_analog * self.data_words_per_sample_analog)}")
 
                                 internal_buffer_analog = data_from_queue_analog[remaining_analog_in_words:]
                                 data_from_queue_analog = data_from_queue_analog[:remaining_analog_in_words]
-                                self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.DATA_WORDS_PER_SAMPLE_ANALOG
+                                self.gap_analog_in_sample = data_from_queue_analog.shape[0] // self.data_words_per_sample_analog
 
-                                frameComplete["stream_out_aux"] = True
+                                frame_complete["stream_out_aux"] = True
 
                                 self.current_frame_analog += 1
 
                     if internal_buffer_analog is not None and internal_buffer_analog.size == 0:
                         internal_buffer_analog = None
 
-                    if self.expected_words_data_analog < (self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.DATA_WORDS_PER_SAMPLE_ANALOG:
-                        self.gap_analog_in_sample = max_gap_frame_analog_in_words // self.DATA_WORDS_PER_SAMPLE_ANALOG - self.current_pointer_in_sample_analog
+                    if self.expected_words_data_analog < (self.current_pointer_in_sample_analog + self.gap_analog_in_sample) * self.data_words_per_sample_analog:
+                        self.gap_analog_in_sample = max_gap_frame_analog_in_words // self.data_words_per_sample_analog - self.current_pointer_in_sample_analog
                         logger.debug("MISTERY")
                         logger.debug("%s %s", "New GAP", self.gap_analog_in_sample)
 
@@ -1482,7 +1482,7 @@ class BaseAcquisitionLoopProcess(mp.Process):
                         list_b_analog, list_x_analog, list_y_analog, list_z_analog, list_rep_analog = decode_pointer_list(
                             self.current_pointer_in_sample_analog,
                             self.gap_analog_in_sample,
-                            self.timebinsPerPixel,
+                            self.timebins_per_pixel,
                             self.shape,
                             snake_walk_xy=self.snake_walk_xy,
                             snake_walk_z=self.snake_walk_z,
@@ -1493,14 +1493,14 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
                         if self.gap_analog_in_sample == 0:
                             logger.debug("self.gap_analog_in_sample = 0")
-                        if self.gap_analog_in_sample * self.DATA_WORDS_PER_SAMPLE_ANALOG > self.buffer_size_in_words_analog:
+                        if self.gap_analog_in_sample * self.data_words_per_sample_analog > self.buffer_size_in_words_analog:
                             logger.debug("%s %s %s %s", "Too many data larger than the buffer. GAP", self.gap_analog_in_sample, "buffer_size_in_words_analog", self.buffer_size_in_words_analog)
 
                         if (
                                 convertDataFromAnalogFIFO(
                                     data = data_from_queue_analog,
                                     start = 0,
-                                    stop = self.gap_analog_in_sample * self.DATA_WORDS_PER_SAMPLE_ANALOG,
+                                    stop = self.gap_analog_in_sample * self.data_words_per_sample_analog,
                                     buffer_out = self.buffer_analog,
                                     force_positive = 0,
                                 )
@@ -1553,11 +1553,11 @@ class BaseAcquisitionLoopProcess(mp.Process):
                                         1, :
                                     ] = correlator.get_correlation_normalized()
                                 if self.activate_trace:
-                                    temporalBinner.add(buffer_up_to_gap_analog[:, analog_ch])
+                                    temporal_binner.add(buffer_up_to_gap_analog[:, analog_ch])
                                     self.trace_pos.value = (
-                                        temporalBinner.get_current_position_bins()
+                                        temporal_binner.get_current_position_bins()
                                     )
-                                    self.trace[1, :] = temporalBinner.get_bins()
+                                    self.trace[1, :] = temporal_binner.get_bins()
 
                             if not self.do_not_save:
                                 self.buffer_analog_for_save[
@@ -1568,15 +1568,15 @@ class BaseAcquisitionLoopProcess(mp.Process):
                             self.shm_loc_previewed["stream_out_aux"].value = self.current_pointer_in_sample_analog
 
                             self.shared_dict_proxy.update({"total_photon": self.total_photon})
-                            if frameComplete["stream_out_aux"]:
+                            if frame_complete["stream_out_aux"]:
                                 # finalize analog frame on the normal path
                                 finalize_frame_fifo_analog()
-                            #debug("self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG >= self.expected_words_data_analog:",
-                            #         self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG, self.expected_words_data_analog)
+                            #debug("self.current_pointer_in_sample_analog * self.data_words_per_sample_analog >= self.expected_words_data_analog:",
+                            #         self.current_pointer_in_sample_analog * self.data_words_per_sample_analog, self.expected_words_data_analog)
 
 
-            cond_digital = (self.current_pointer_in_sample_digital * self.DATA_WORDS_PER_SAMPLE_DIGITAL >= self.expected_words_data_digital)
-            cond_analog  = (self.current_pointer_in_sample_analog * self.DATA_WORDS_PER_SAMPLE_ANALOG >= self.expected_words_data_analog)
+            cond_digital = (self.current_pointer_in_sample_digital * self.data_words_per_sample_digital >= self.expected_words_data_digital)
+            cond_analog  = (self.current_pointer_in_sample_analog * self.data_words_per_sample_analog >= self.expected_words_data_analog)
 
             if not self.software_trigger_preview and not(
                     ("stream_out_main" in self.shm_activated_fifos_list and not cond_digital)
@@ -1588,14 +1588,14 @@ class BaseAcquisitionLoopProcess(mp.Process):
 
             if trace_reset_event_proxy.is_set():
                 logger.debug("trace_reset_event.is_set()")
-                temporalBinner.reset()
+                temporal_binner.reset()
                 if self.dfd_enable:
                     self.trace_dfd[1, :] = 0
                     self.trace_dfd[2, :] = 0
                 trace_reset_event_proxy.clear()
-            if FCS_reset_event_proxy.is_set():
+            if fcs_reset_event_proxy.is_set():
                 correlator.reset()
-                FCS_reset_event_proxy.clear()
+                fcs_reset_event_proxy.clear()
 
             time.sleep(0.000001)
         # self.profiler.disable()
@@ -1628,9 +1628,9 @@ class BaseAcquisitionLoopProcess(mp.Process):
         logger.debug("Trace Reset")
         self.trace_reset_event.set()
 
-    def FCS_reset(self):
+    def fcs_reset(self):
         logger.debug("FCS Reset")
-        self.FCS_reset_event.set()
+        self.fcs_reset_event.set()
 
     def update_dictionary_now(self):
         pass

@@ -32,7 +32,7 @@ class PISPAD23AcquisitionLoopProcess(BaseAcquisitionLoopProcess):
     def _decode_raw_bunch(self, payload):
         return pispad23_decode_raw_bunch_to_spad_preview_words(
             payload,
-            digital_words_per_sample=self.DATA_WORDS_PER_SAMPLE_DIGITAL,
+            digital_words_per_sample=self.data_words_per_sample_digital,
         ).astype(np.uint64, copy=False)
 
 

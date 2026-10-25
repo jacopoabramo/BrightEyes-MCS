@@ -1377,4 +1377,4 @@ class McsManager():
         """
         Reset the FCS process
         """
-        self.previewProcess.FCS_reset()
+        self.previewProcess.fcs_reset()

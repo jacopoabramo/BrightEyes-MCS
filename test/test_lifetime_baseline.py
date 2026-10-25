@@ -55,7 +55,7 @@ def test_three_sample_phase_of_a_single_window() -> None:
         np.array([8.0]),
         np.array([0.0]),
         np.array([0.0]),
-        T_cycle=1.0,
+        cycle_period=1.0,
         sample_idx=np.array([1.5, 5.5, 9.5]),
         peak_idx=0,
         total_bins=12,
@@ -74,7 +74,7 @@ def test_three_sample_marks_a_dark_pixel_invalid() -> None:
         np.array([0.0]),
         np.array([0.0]),
         np.array([0.0]),
-        T_cycle=1.0,
+        cycle_period=1.0,
         sample_idx=np.array([1.5, 5.5, 9.5]),
         total_bins=12,
     )

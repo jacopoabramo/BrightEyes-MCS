@@ -300,8 +300,8 @@
     "key": [
       "src/brighteyes_mcs/acquisition/workers/fpga.py",
       "F811",
-      "Redefinition of unused `loop_fifoReadContinously` from line 228: `loop_fifoReadContinously` redefined here",
-      "def loop_fifoReadContinously(self):"
+      "Redefinition of unused `loop_fifo_read_continuously` from line 228: `loop_fifo_read_continuously` redefined here",
+      "def loop_fifo_read_continuously(self):"
     ],
     "count": 1
   },
@@ -1642,15 +1642,6 @@
       "src/brighteyes_mcs/ui/qt/main_window.py",
       "E402",
       "Module level import not at top of file",
-      "from brighteyes_mcs.logging_setup import logger"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "E402",
-      "Module level import not at top of file",
       "from pathlib import Path"
     ],
     "count": 1
@@ -2336,78 +2327,6 @@
       "F401",
       "`brighteyes_mcs_cylibs.fastconverter.convertRawDataToCountsDirect49` imported but unused",
       "convertRawDataToCountsDirect49,"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `Cx`",
-      "\"time_bin_dwell_cycles\": int(Cx),"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `MyClass`",
-      "instance = MyClass()"
-    ],
-    "count": 31
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `clock_duration`",
-      "\"tag_clock_duration_cycles\": int(clock_duration),"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `np`",
-      "instance.currentImage = np.zeros((10, 10, 10, 10, 10))"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `time_bin`",
-      "\"max_time_bins_per_pixel\": int(time_bin),"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `waitAfterFrame`",
-      "\"wait_post_frame_cycles\": int(waitAfterFrame),"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `waitForLaserInCycle`",
-      "\"wait_laser_startup_cycles\": int(waitForLaserInCycle),"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "test/test_mainwindow.py",
-      "F821",
-      "Undefined name `waitOnlyFirstTime`",
-      "\"wait_laser_first_time_only_enable\": waitOnlyFirstTime,"
     ],
     "count": 1
   },
