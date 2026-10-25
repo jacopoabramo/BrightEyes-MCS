@@ -4,6 +4,8 @@ import numpy as np
 import multiprocessing as mp
 import re
 import time
+from collections.abc import Mapping
+from typing import Any
 
 # from PySide6.QtCore import QObject
 
@@ -18,6 +20,8 @@ from ..acquisition.detectors.models import (
     normalize_detector_model,
 )
 from ..acquisition.detectors import create_detector_pipeline
+from ..acquisition.registers import run_registers
+from ..acquisition.settings import AcquisitionConfig
 
 from ..acquisition import (
     AcquisitionCoordinator,
@@ -277,7 +281,7 @@ class McsManager:
         """
         logger.debug("Destructor called.")
 
-    def set_dfd_nbins(self, dfd_nbins):
+    def set_dfd_nbins(self, dfd_nbins: int) -> None:
         """
         Set the number of dfd_nbins
         """
@@ -305,7 +309,7 @@ class McsManager:
 
         return parsed_cycle_mhz, parsed_bins
 
-    def set_spad_channels(self, ch):
+    def set_spad_channels(self, ch: int) -> None:
         """
         Set the number of SPAD channels
         """
@@ -322,14 +326,14 @@ class McsManager:
 
         self.default_configuration.update(mydict)
 
-    def set_show_preview(self, enable):
+    def set_show_preview(self, enable: bool) -> None:
         """
         Activate the preview flag
         """
         logger.debug("%s %s", "activate_show_preview", enable)
         self.activate_show_preview = enable
 
-    def set_activated_fifo(self, fifos_list):
+    def set_activated_fifo(self, fifos_list: list[str]) -> None:
         """
         Set the activated FIFOs
         """
@@ -374,7 +378,7 @@ class McsManager:
         """
         return self.acquisition_almost_done_event.is_set()
 
-    def set_do_not_save(self, active=True):
+    def set_do_not_save(self, active: bool = True) -> None:
         """
         Activate the preview
         """
@@ -385,21 +389,21 @@ class McsManager:
             self.do_not_save_event.clear()
             logger.debug("self.do_not_save_event.clear()")
 
-    def set_dfd_enable(self, activate=True):
+    def set_dfd_enable(self, activate: bool = True) -> None:
         """
         Activate the DFD mode
         """
         logger.debug("%s %s", "set_dfd_enable() set to ", activate)
         self.dfd_enable = activate
 
-    def set_activate_snake_walk_xy(self, activate=True):
+    def set_activate_snake_walk_xy(self, activate: bool = True) -> None:
         """
         Set the snake walk (bidirectional scanning)
         """
         logger.debug("%s %s", "set_activate_snake_walk_xy() set to ", activate)
         self.snake_walk_xy = activate
 
-    def set_activate_snake_walk_z(self, activate=True):
+    def set_activate_snake_walk_z(self, activate: bool = True) -> None:
         """
         Set the snake walk (bidirectional scanning)
         """
@@ -540,7 +544,7 @@ class McsManager:
             self.fpga_handle = None
             raise RuntimeError(str(e) or "FPGA initialization failed.") from e
 
-    def set_filename_h5(self, filename):
+    def set_filename_h5(self, filename: str) -> None:
         """
         Set the filename for the HDF5 file
         """
@@ -568,7 +572,7 @@ class McsManager:
         if self.fpga_handle is not None:
             self.fpga_handle.set_detector_model(self.detector_model)
 
-    def set_pispad23_connection(self, host="127.0.0.1", port=9997):
+    def set_pispad23_connection(self, host: str = "127.0.0.1", port: int = 9997) -> None:
         self.pispad23_host = str(host or "127.0.0.1")
         self.pispad23_port = int(port or 9997)
         self.shared_dict["pispad23_host"] = self.pispad23_host
@@ -576,21 +580,72 @@ class McsManager:
         self.shared_dict["pispad23_greeting_raw"] = ""
         self.shared_dict["pispad23_greeting_decoded"] = ""
 
-    def set_raw_stream_mode(self, enabled=False):
+    def set_raw_stream_mode(self, enabled: bool = False) -> None:
         """
         Enable direct FIFO-to-disk streaming without preview/conversion.
         """
         self.raw_stream_mode = enabled
 
-    def set_raw_output_files(self, raw_output_files=None):
+    def set_raw_output_files(self, raw_output_files: Mapping[str, str] | None = None) -> None:
         """
         Set the per-FIFO destination files used by raw streaming mode.
         """
         self.raw_output_files = dict(raw_output_files or {})
 
-    def run(self):
+    def run(self) -> None:
         """Start acquisition through the application coordinator."""
-        return self.acquisition_coordinator.run()
+        self.acquisition_coordinator.run()
+
+    def prepare_run(self, config: AcquisitionConfig, *, streams: bool = True) -> dict[str, Any]:
+        """Apply the settings of a run, write its registers in order and return them merged.
+
+        Parameters
+        ----------
+        streams
+            Whether to select the FIFOs and write the stream enables; a start
+            that only tests the scan leaves them as they are.
+        """
+        detector = config.detector
+        self.set_spad_channels(detector.channels)
+        if detector_uses_pispad23_pipeline(detector.model):
+            self.set_pispad23_connection(detector.pispad23_host, detector.pispad23_port)
+        self.pispad23_stream_port = detector.pispad23_stream_port
+        self.pispad23_batch_size = detector.pispad23_batch_size
+        self.set_dfd_enable(config.streams.dfd)
+        self.set_dfd_nbins(config.dfd.bins)
+        self.set_activate_snake_walk_xy(config.options.snake_xy)
+        self.set_activate_snake_walk_z(config.options.snake_z)
+        self.set_compensation_delay_for_snake(config.options.snake_delay)
+        if streams:
+            fifos = (
+                ("stream_out_main", config.streams.digital_fifo),
+                ("stream_out_aux", config.streams.analog_fifo),
+            )
+            self.set_activated_fifo([name for name, selected in fifos if selected])
+        self.set_show_preview(config.live.show_preview)
+        self.set_do_not_save(not config.output.save)
+        self.set_raw_stream_mode(config.output.raw_stream)
+        self.set_filename_h5(config.output.filename)
+        if config.output.raw_stream:
+            self.set_raw_output_files(config.output.raw_files)
+        self.set_autocorrelation_maxx(config.live.correlation_bins)
+        resolution = config.timing.time_resolution_us
+        trace_bins = int(config.live.trace_bin_ms * 1e3 / resolution)
+        trace_length = config.live.trace_length_s * 1e6 / resolution
+        self.set_trace_bins(trace_bins=trace_bins)
+        self.set_trace_sample_per_bins(trace_sample_per_bins=int(trace_length // trace_bins))
+        self.set_clk_multiplier(config.dfd.clock_multiplier if config.streams.dfd else 1)
+        written: dict[str, Any] = {}
+        for registers in run_registers(config, streams=streams):
+            self.set_registers_dict(registers)
+            written.update(registers)
+        return written
+
+    def start(self) -> dict[str, Any]:
+        """Send the start command as a fresh rising edge and return the command registers left set."""
+        self.set_registers_dict({"stop_command": False, "start_command": True})
+        self.set_registers_dict({"start_command": False})
+        return {"stop_command": False, "start_command": False}
 
     def _run_pipeline(self):
         """
@@ -846,7 +901,7 @@ class McsManager:
         """
         self.shared_image_xy = None
 
-    def set_registers_dict(self, myconf):
+    def set_registers_dict(self, myconf: Mapping[str, Any]) -> None:
         """
         Set the registers dictionary
         """
@@ -1282,33 +1337,33 @@ class McsManager:
         """
         self.update_shared_dict({"channel": ch})
 
-    def set_autocorrelation_maxx(self, value=20):
+    def set_autocorrelation_maxx(self, value: int = 20) -> None:
         """
         Set the autocorrelation maxx
         """
         logger.debug("%s %s", "set_autocorrelation_maxx", value)
         self.autocorrelation_maxx = value
 
-    def set_clk_multiplier(self, multiplier=1):
+    def set_clk_multiplier(self, multiplier: int = 1) -> None:
         logger.debug("%s %s", "set_clk_multiplier", multiplier)
         self.clk_multiplier = multiplier
 
     def set_dfd_shift(self, shift=0):
         self.dfd_shift = shift
 
-    def set_compensation_delay_for_snake(self, delay=0):
+    def set_compensation_delay_for_snake(self, delay: int = 0) -> None:
         delay = int(delay)
         self.compensation_delay_for_snake = delay
         if self.compensation_delay_for_snake_shared is not None:
             self.compensation_delay_for_snake_shared.value = delay
 
-    def set_trace_bins(self, trace_bins=30000):
+    def set_trace_bins(self, trace_bins: int = 30000) -> None:
         """
         Set the trace bins
         """
         self.trace_bins = trace_bins
 
-    def set_trace_sample_per_bins(self, trace_sample_per_bins=10000):
+    def set_trace_sample_per_bins(self, trace_sample_per_bins: int = 10000) -> None:
         """
         Set the trace sample per bins
         """
