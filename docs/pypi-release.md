@@ -7,8 +7,8 @@
 > Public release availability has not been verified for this guide.
 
 The repository uses a root package layout: the import package is
-`brighteyes_mcs/`, and `pyproject.toml` explicitly limits setuptools discovery
-to that package tree. A move to `src/brighteyes_mcs/` is not required for
+`brighteyes_mcs/`, built with the `uv_build` backend, which packages that
+directory only. A move to `src/brighteyes_mcs/` is not required for
 publication.
 
 The Python package contains application code, default configuration, Qt forms,
@@ -42,17 +42,18 @@ The workflow template uses OpenID Connect and does not require a stored PyPI API
 
 ## Preparing a release
 
-Update `brighteyes_mcs.__version__`, add release notes, and run from a clean
-checkout:
+Set the version with `uv version VERSION` (it writes `pyproject.toml`, and
+`brighteyes_mcs.__version__` reads it from the installed package), add release
+notes, and run from a clean checkout:
 
 ```powershell
-python -m pip install -e ".[dev]"
-python -m pytest -q
-python -m unittest test.test_channel_delay_skew_plugin -v
-python -m build
-python -m twine check dist/*
-python scripts/check_distribution.py dist
-python -m brighteyes_mcs --no-first-run
+uv sync --locked
+uv run pytest -q
+uv run python -m unittest test.test_channel_delay_skew_plugin -v
+uv build
+uvx twine check dist/*
+uv run python scripts/check_distribution.py dist
+uv run python -m brighteyes_mcs --no-first-run
 ```
 
 Replace `VERSION` in the examples with the version being released.
@@ -61,7 +62,7 @@ For a TestPyPI rehearsal, upload the same artifacts using a TestPyPI account
 and install them while allowing production PyPI to supply dependencies:
 
 ```powershell
-python -m twine upload --repository testpypi dist/*
+uv publish --publish-url https://test.pypi.org/legacy/ dist/*
 python -m pip install --index-url https://test.pypi.org/simple/ `
   --extra-index-url https://pypi.org/simple/ brighteyes-mcs==VERSION
 ```
@@ -74,7 +75,7 @@ already accepted.
 
 After configuring the publisher and explicitly enabling the release workflow,
 commit and merge the release changes, then create and push a version tag that
-exactly matches `brighteyes_mcs.__version__`:
+exactly matches the version in `pyproject.toml`:
 
 ```powershell
 git tag -a vVERSION -m "BrightEyes-MCS VERSION"

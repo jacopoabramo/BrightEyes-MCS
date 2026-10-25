@@ -6,17 +6,20 @@ with the maintainers before changing acquisition code.
 
 ## Development environment
 
-Use a source checkout and Python 3.12 (64-bit) on Windows. From the repository root:
+Use a source checkout and Python 3.11 or later (64-bit) on Windows. The
+development environment is managed with [uv](https://docs.astral.sh/uv/), which
+installs the versions pinned in `uv.lock`. From the repository root:
 
 ```powershell
-py -3.12 -m venv .venv
+uv sync
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
 ```
 
+`uv sync` creates `.venv` with the project in editable mode and the `dev`
+dependency group. Without activating it, prefix a command with `uv run`.
 In Command Prompt use `.venv\Scripts\activate.bat`. Package metadata and
-runtime dependencies are defined in [pyproject.toml](pyproject.toml).
+runtime dependencies are defined in [pyproject.toml](pyproject.toml); add or
+change a dependency with `uv add` so the lock file follows.
 NI drivers and matching firmware are needed for physical acquisition, not for
 the mocked unit tests. Do not commit local microscope profiles, data, or firmware.
 
@@ -48,7 +51,7 @@ automatic fixes. After removing legacy findings, regenerate the baseline with
 `python scripts/check_lint.py --write-baseline` and review the diff; never use
 that command simply to accept new findings. Ruff is pinned for reproducibility.
 
-For distribution changes also run `python -m build`, `python -m twine check dist/*`,
+For distribution changes also run `uv build`, `uvx twine check dist/*`,
 and `python scripts/check_distribution.py dist`; use a clean output directory.
 See the [release guide](docs/pypi-release.md) before publishing. Publication is disabled.
 

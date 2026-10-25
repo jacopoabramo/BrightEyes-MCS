@@ -18,8 +18,8 @@ di Tecnologia (Italian Institute of Technology).
 
 ## Quick Start
 
-BrightEyes-MCS requires **Python 3.10 or newer**. Python **3.12 (64-bit)** is
-recommended, although any compatible Python version from 3.10 onward should be
+BrightEyes-MCS requires **Python 3.11 or newer**. Python **3.12 (64-bit)** is
+recommended, although any compatible Python version from 3.11 onward should be
 sufficient.
 
 Use any environment manager you prefer, such as Python `venv`, Conda, uv, or
@@ -84,7 +84,6 @@ From the source checkout, optional plug-in dependencies can be installed with:
 
 ```console
 python -m pip install ".[ao]"    # serial-controlled AO hardware
-python -m pip install ".[flim]"  # FLIM/DFD analysis
 python -m pip install ".[all]"   # all optional plug-in dependencies
 ```
 
