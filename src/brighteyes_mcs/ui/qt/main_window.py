@@ -83,10 +83,15 @@ from .graphics_shutdown import disable_viewbox_item_change_callbacks
 from .system_profile_dialog import SystemProfileDialog
 from ...acquisition.manager import McsManager
 from ...acquisition.registers import (
+    AnalogInputs,
+    AnalogOutputs,
+    AuxiliaryAxis,
     LaserSettings,
     ScanArea,
+    ScanLimits,
     ScanOptions,
     ScanPattern,
+    StreamSelection,
     Timing,
     circular_points_for_projection,
     lissajous_offsets,
@@ -1773,59 +1778,58 @@ class MainWindow(QMainWindow):
         # before sending the complete analog-output configuration.
         self._sync_auxiliary_position_outputs()
 
-        mydict = {}
-        for ch in range(0, 8):
-            sel = self.ui.comboBox_AnalogOut[ch].currentIndex()
-            if self.ui.comboBox_AnalogOut[ch].currentText() == "Constant":
-                sel = 15
+        self.setRegistersDict(self._analog_outputs().registers())
 
-            mydict["analog_output_%d_source_selector" % ch] = sel
-            mydict["analog_output_%d_dc_volts" % ch] = self.ui.spinBox_AnalogOut[ch].value()
+    def _analog_outputs(self):
+        """Return the source and DC voltage set for each analog output."""
+        return AnalogOutputs(
+            sources=tuple(self.ui.comboBox_AnalogOut[ch].currentText() for ch in range(8)),
+            dc_volts=tuple(self.ui.spinBox_AnalogOut[ch].value() for ch in range(8)),
+        )
 
-        self.setRegistersDict(mydict)
-
-    def _auxiliary_axis_voltages(self):
-        """Calculate constrained auxiliary X2/Y2/Z2 output voltages."""
-        axis_widgets = {
-            "X2": (
-                self.ui.spinBox_off_x2_um,
-                self.ui.spinBox_calib_x_2,
-                self.ui.spinBox_offExtra_x_V_2,
-                self.ui.spinBox_min_x_V_2,
-                self.ui.spinBox_max_x_V_2,
-                self.ui.label_off_x_V_2,
+    def _auxiliary_axes(self):
+        """Return the X2, Y2 and Z2 axes set in the auxiliary-position widgets."""
+        return {
+            "X2": AuxiliaryAxis(
+                position_um=self.ui.spinBox_off_x2_um.value(),
+                calibration_um_per_volt=self.ui.spinBox_calib_x_2.value(),
+                extra_offset_volts=self.ui.spinBox_offExtra_x_V_2.value(),
+                minimum_volts=self.ui.spinBox_min_x_V_2.value(),
+                maximum_volts=self.ui.spinBox_max_x_V_2.value(),
             ),
-            "Y2": (
-                self.ui.spinBox_off_y2_um,
-                self.ui.spinBox_calib_y_2,
-                self.ui.spinBox_offExtra_y_V_2,
-                self.ui.spinBox_min_y_V_2,
-                self.ui.spinBox_max_y_V_2,
-                self.ui.label_off_y_V_2,
+            "Y2": AuxiliaryAxis(
+                position_um=self.ui.spinBox_off_y2_um.value(),
+                calibration_um_per_volt=self.ui.spinBox_calib_y_2.value(),
+                extra_offset_volts=self.ui.spinBox_offExtra_y_V_2.value(),
+                minimum_volts=self.ui.spinBox_min_y_V_2.value(),
+                maximum_volts=self.ui.spinBox_max_y_V_2.value(),
             ),
-            "Z2": (
-                self.ui.spinBox_off_z2_um,
-                self.ui.spinBox_calib_z_2,
-                self.ui.spinBox_offExtra_z_V_2,
-                self.ui.spinBox_min_z_V_2,
-                self.ui.spinBox_max_z_V_2,
-                self.ui.label_off_z_V_2,
+            "Z2": AuxiliaryAxis(
+                position_um=self.ui.spinBox_off_z2_um.value(),
+                calibration_um_per_volt=self.ui.spinBox_calib_z_2.value(),
+                extra_offset_volts=self.ui.spinBox_offExtra_z_V_2.value(),
+                minimum_volts=self.ui.spinBox_min_z_V_2.value(),
+                maximum_volts=self.ui.spinBox_max_z_V_2.value(),
             ),
         }
 
+    def _auxiliary_axis_voltages(self):
+        """Calculate constrained auxiliary X2/Y2/Z2 output voltages."""
+        labels = {
+            "X2": self.ui.label_off_x_V_2,
+            "Y2": self.ui.label_off_y_V_2,
+            "Z2": self.ui.label_off_z_V_2,
+        }
+
         voltages = {}
-        for axis, widgets in axis_widgets.items():
-            position, calibration, offset, minimum, maximum, label = widgets
-            calibration_value = calibration.value()
-            if calibration_value == 0:
-                label.setText("invalid")
+        for axis, auxiliary_axis in self._auxiliary_axes().items():
+            voltage = auxiliary_axis.volts()
+            if voltage is None:
+                labels[axis].setText("invalid")
                 logger.warning("Cannot update %s: calibration factor is zero", axis)
                 continue
 
-            voltage = position.value() / calibration_value + offset.value()
-            lower, upper = sorted((minimum.value(), maximum.value()))
-            voltage = min(max(voltage, lower), upper)
-            label.setText(f"{voltage:.6f}")
+            labels[axis].setText(f"{voltage:.6f}")
             voltages[axis] = voltage
 
         return voltages
@@ -6104,23 +6108,21 @@ Have fun!
         event when the max and min voltages are changed
         """
         logger.debug("updateMaxMinVoltages")
-        min_x_V = self.ui.spinBox_min_x_V.value()
-        min_y_V = self.ui.spinBox_min_y_V.value()
-        min_z_V = self.ui.spinBox_min_z_V.value()
+        self.setRegistersDict(self._scan_limits().registers())
 
-        max_x_V = self.ui.spinBox_max_x_V.value()
-        max_y_V = self.ui.spinBox_max_y_V.value()
-        max_z_V = self.ui.spinBox_max_z_V.value()
-
-        self.setRegistersDict(
-            {
-                "min_x_volts": min_x_V,
-                "min_y_volts": min_y_V,
-                "min_z_volts": min_z_V,
-                "max_x_volts": max_x_V,
-                "max_y_volts": max_y_V,
-                "max_z_volts": max_z_V,
-            }
+    def _scan_limits(self):
+        """Return the voltage limits set for the main scan axes."""
+        return ScanLimits(
+            minimum_volts=(
+                self.ui.spinBox_min_x_V.value(),
+                self.ui.spinBox_min_y_V.value(),
+                self.ui.spinBox_min_z_V.value(),
+            ),
+            maximum_volts=(
+                self.ui.spinBox_max_x_V.value(),
+                self.ui.spinBox_max_y_V.value(),
+                self.ui.spinBox_max_z_V.value(),
+            ),
         )
 
     @Slot()
@@ -6795,21 +6797,27 @@ Have fun!
         # self.ui.comboBox_analogSelect_A
         # self.ui.comboBox_analogSelect_B
 
-        self.setRegistersDict(
-            {
-                "analog_a_channel_0_integrate_enable": self.ui.checkBox_analog_in_integrate_AI0.isChecked(),
-                "analog_a_channel_0_invert_enable": self.ui.checkBox_analog_in_invert_AI0.isChecked(),
-                "analog_a_channel_1_integrate_enable": self.ui.checkBox_analog_in_integrate_AI1.isChecked(),
-                "analog_a_channel_1_invert_enable": self.ui.checkBox_analog_in_invert_AI1.isChecked(),
-                "analog_a_channel_2_integrate_enable": self.ui.checkBox_analog_in_integrate_AI2.isChecked(),
-                "analog_a_channel_2_invert_enable": self.ui.checkBox_analog_in_invert_AI2.isChecked(),
-                "analog_a_channel_3_integrate_enable": self.ui.checkBox_analog_in_integrate_AI3.isChecked(),
-                "analog_a_channel_3_invert_enable": self.ui.checkBox_analog_in_invert_AI3.isChecked(),
-                "analog_a_input_selector": self.ui.comboBox_analogSelect_A.currentIndex(),
-                "analog_b_input_selector": self.ui.comboBox_analogSelect_B.currentIndex(),
-                "analog_a_differential_mode_enable": self.ui.checkBox_analog_in_differentiate_A.isChecked(),
-                "analog_b_differential_mode_enable": self.ui.checkBox_analog_in_differentiate_B.isChecked(),
-            }
+        self.setRegistersDict(self._analog_inputs().registers())
+
+    def _analog_inputs(self):
+        """Return the analog input conditioning and selection set in the analog-input widgets."""
+        return AnalogInputs(
+            integrate=(
+                self.ui.checkBox_analog_in_integrate_AI0.isChecked(),
+                self.ui.checkBox_analog_in_integrate_AI1.isChecked(),
+                self.ui.checkBox_analog_in_integrate_AI2.isChecked(),
+                self.ui.checkBox_analog_in_integrate_AI3.isChecked(),
+            ),
+            invert=(
+                self.ui.checkBox_analog_in_invert_AI0.isChecked(),
+                self.ui.checkBox_analog_in_invert_AI1.isChecked(),
+                self.ui.checkBox_analog_in_invert_AI2.isChecked(),
+                self.ui.checkBox_analog_in_invert_AI3.isChecked(),
+            ),
+            selector_a=self.ui.comboBox_analogSelect_A.currentIndex(),
+            selector_b=self.ui.comboBox_analogSelect_B.currentIndex(),
+            differential_a=self.ui.checkBox_analog_in_differentiate_A.isChecked(),
+            differential_b=self.ui.checkBox_analog_in_differentiate_B.isChecked(),
         )
 
     def activateShowPreview(self, enable):
@@ -6834,22 +6842,15 @@ Have fun!
 
         self.mcs_manager.set_activated_fifo(fifo)
 
-        if self.dfd_enable:
-            self.setRegistersDict(
-                {
-                    "dfd_enable": True,
-                    "stream_out_aux_enable": self.ui.checkBox_fifo_analog.isChecked(),
-                    "stream_out_main_enable": self.ui.checkBox_fifo_digital.isChecked(),
-                }
-            )
-        else:
-            self.setRegistersDict(
-                {
-                    "dfd_enable": False,
-                    "stream_out_aux_enable": self.ui.checkBox_fifo_analog.isChecked(),
-                    "stream_out_main_enable": self.ui.checkBox_fifo_digital.isChecked(),
-                }
-            )
+        self.setRegistersDict(self._stream_selection().registers())
+
+    def _stream_selection(self):
+        """Return the data streams selected for the run, with DFD as set at its start."""
+        return StreamSelection(
+            dfd=self.dfd_enable,
+            analog_fifo=self.ui.checkBox_fifo_analog.isChecked(),
+            digital_fifo=self.ui.checkBox_fifo_digital.isChecked(),
+        )
 
     def updateRectLimit(self):
         """

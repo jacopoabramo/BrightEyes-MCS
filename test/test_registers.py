@@ -6,10 +6,15 @@ import numpy as np
 import pytest
 
 from brighteyes_mcs.acquisition.registers import (
+    AnalogInputs,
+    AnalogOutputs,
+    AuxiliaryAxis,
     LaserSettings,
     ScanArea,
+    ScanLimits,
     ScanOptions,
     ScanPattern,
+    StreamSelection,
     Timing,
     circular_points_for_projection,
     lissajous_offsets,
@@ -226,4 +231,86 @@ def test_scan_options_registers():
         "z_snake_scan_enable": False,
         "dfd_laser_sync_debug_enable": True,
         "dfd_trigger_selector": 5,
+    }
+
+
+def test_auxiliary_axis_volts():
+    """Convert a secondary position to volts with its calibration and extra offset."""
+    assert AuxiliaryAxis(10.0, 5.0, 0.5, -1.0, 3.0).volts() == pytest.approx(2.5)
+
+
+def test_auxiliary_axis_clamps_with_limits_in_either_order():
+    """Clamp to the limits even when the minimum is above the maximum."""
+    assert AuxiliaryAxis(100.0, 5.0, 0.5, -1.0, 3.0).volts() == 3.0
+    assert AuxiliaryAxis(100.0, 5.0, 0.5, 3.0, -1.0).volts() == 3.0
+
+
+def test_auxiliary_axis_zero_calibration_gives_none():
+    """Return None for a zero calibration instead of raising."""
+    assert AuxiliaryAxis(10.0, 0.0, 0.5, -1.0, 3.0).volts() is None
+
+
+def test_analog_outputs_send_constant_as_15():
+    """Send each source's position in the source list, with Constant sent as 15."""
+    sources = ("X", "Y", "Z", "Constant", "Laser 1", "Laser 4", "X2", "Z2")
+    registers = AnalogOutputs(sources, tuple(0.5 * n for n in range(8))).registers()
+    assert [registers[f"analog_output_{n}_source_selector"] for n in range(8)] == [
+        0,
+        1,
+        2,
+        15,
+        4,
+        7,
+        8,
+        10,
+    ]
+    assert registers["analog_output_7_dc_volts"] == 3.5
+
+
+def test_analog_inputs_registers():
+    """Write the integrate and invert flags per channel, the two selectors and the two differential flags."""
+    inputs = AnalogInputs(
+        integrate=(True, False, False, True),
+        invert=(False, True, False, False),
+        selector_a=2,
+        selector_b=3,
+        differential_a=True,
+        differential_b=False,
+    )
+    assert inputs.registers() == {
+        "analog_a_channel_0_integrate_enable": True,
+        "analog_a_channel_0_invert_enable": False,
+        "analog_a_channel_1_integrate_enable": False,
+        "analog_a_channel_1_invert_enable": True,
+        "analog_a_channel_2_integrate_enable": False,
+        "analog_a_channel_2_invert_enable": False,
+        "analog_a_channel_3_integrate_enable": True,
+        "analog_a_channel_3_invert_enable": False,
+        "analog_a_input_selector": 2,
+        "analog_b_input_selector": 3,
+        "analog_a_differential_mode_enable": True,
+        "analog_b_differential_mode_enable": False,
+    }
+
+
+def test_scan_limits_registers():
+    """Write the minimum and maximum voltage of each main axis."""
+    limits = ScanLimits(minimum_volts=(-4.0, -3.0, -2.0), maximum_volts=(4.5, 3.5, 2.5))
+    assert limits.registers() == {
+        "min_x_volts": -4.0,
+        "min_y_volts": -3.0,
+        "min_z_volts": -2.0,
+        "max_x_volts": 4.5,
+        "max_y_volts": 3.5,
+        "max_z_volts": 2.5,
+    }
+
+
+def test_stream_selection_registers():
+    """Enable DFD and each output stream as selected."""
+    streams = StreamSelection(dfd=True, analog_fifo=True, digital_fifo=False)
+    assert streams.registers() == {
+        "dfd_enable": True,
+        "stream_out_aux_enable": True,
+        "stream_out_main_enable": False,
     }
