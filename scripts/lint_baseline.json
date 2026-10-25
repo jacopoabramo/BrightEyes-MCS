@@ -1189,15 +1189,6 @@
   },
   {
     "key": [
-      "src/brighteyes_mcs/storage/h5.py",
-      "E722",
-      "Do not use bare `except`",
-      "except:"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
       "src/brighteyes_mcs/ui/qt/__init__.py",
       "E402",
       "Module level import not at top of file",
@@ -1352,24 +1343,6 @@
   {
     "key": [
       "src/brighteyes_mcs/ui/qt/main_window.py",
-      "B905",
-      "`zip()` without an explicit `strict=` parameter",
-      "for offset, calibration in zip(offsets_um, calibrations)"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "B905",
-      "`zip()` without an explicit `strict=` parameter",
-      "for offset, calibration, extra_offset in zip(offsets_um, calibrations, offset_extra_V)"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
       "E401",
       "Multiple imports on one line",
       "import os, sys"
@@ -1391,6 +1364,15 @@
       "E402",
       "Module level import not at top of file",
       "from ...acquisition.manager import McsManager"
+    ],
+    "count": 1
+  },
+  {
+    "key": [
+      "src/brighteyes_mcs/ui/qt/main_window.py",
+      "E402",
+      "Module level import not at top of file",
+      "from ...acquisition.registers import ScanArea, Timing"
     ],
     "count": 1
   },
@@ -1767,15 +1749,6 @@
     "key": [
       "src/brighteyes_mcs/ui/qt/main_window.py",
       "F841",
-      "Local variable `calibration_v_step` is assigned to but never used",
-      "calibration_v_step = ("
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
       "Local variable `clock_duration` is assigned to but never used",
       "clock_duration = time_bin * time_res * self.clock_base/2"
     ],
@@ -1812,53 +1785,8 @@
     "key": [
       "src/brighteyes_mcs/ui/qt/main_window.py",
       "F841",
-      "Local variable `laserEnable0` is assigned to but never used",
-      "laserEnable0 = self.ui.checkBox_laser0.isChecked()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `laserEnable1` is assigned to but never used",
-      "laserEnable1 = self.ui.checkBox_laser1.isChecked()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `laserEnable2` is assigned to but never used",
-      "laserEnable2 = self.ui.checkBox_laser2.isChecked()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `laserEnable3` is assigned to but never used",
-      "laserEnable3 = self.ui.checkBox_laser3.isChecked()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
       "Local variable `mouse_point` is assigned to but never used",
       "mouse_point = mouse_event.pos()"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `numbers_repetition` is assigned to but never used",
-      "numbers_repetition = self.ui.spinBox_nrepetition.value()"
     ],
     "count": 1
   },
@@ -1869,7 +1797,7 @@
       "Local variable `offset_xx_um` is assigned to but never used",
       "offset_xx_um = self.ui.spinBox_off_x_um.value()"
     ],
-    "count": 4
+    "count": 1
   },
   {
     "key": [
@@ -1878,7 +1806,7 @@
       "Local variable `offset_yy_um` is assigned to but never used",
       "offset_yy_um = self.ui.spinBox_off_y_um.value()"
     ],
-    "count": 4
+    "count": 1
   },
   {
     "key": [
@@ -1887,7 +1815,7 @@
       "Local variable `offset_zz_um` is assigned to but never used",
       "offset_zz_um = self.ui.spinBox_off_z_um.value()"
     ],
-    "count": 4
+    "count": 1
   },
   {
     "key": [
@@ -1922,15 +1850,6 @@
       "F841",
       "Local variable `selected_end_level` is assigned to but never used",
       "selected_end_level = candidate_end_level"
-    ],
-    "count": 1
-  },
-  {
-    "key": [
-      "src/brighteyes_mcs/ui/qt/main_window.py",
-      "F841",
-      "Local variable `start_offset` is assigned to but never used",
-      "start_offset = np.asarray("
     ],
     "count": 1
   },
@@ -2058,7 +1977,7 @@
       "Blank line contains whitespace",
       ""
     ],
-    "count": 6
+    "count": 5
   },
   {
     "key": [
