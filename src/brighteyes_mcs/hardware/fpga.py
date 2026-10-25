@@ -82,8 +82,6 @@ class FpgaHandle(object):
 
         self.use_rust_fifo = use_rust_fifo
 
-        def __del__(self):
-            self.stop()
 
         # self.fpga_handle_process = NiFpgaControlProcess(self.configuration)
         # print("NiFpgaControlProcess(self.configuration)")
@@ -158,7 +156,7 @@ class FpgaHandle(object):
         logger.debug("FPGA1 configured")
 
 
-    def fpga_handle_process_isAlive(self):
+    def fpga_handle_process_is_alive(self):
         try:
             return self.fpga_handle_process.is_alive()
         except:

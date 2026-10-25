@@ -4882,7 +4882,7 @@ class MainWindow(QMainWindow):
             logger.debug('Data process status is unavailable', exc_info=True)
 
         try:
-            if self.mcs_manager.fpga_handle.fpga_handle_process_isAlive():
+            if self.mcs_manager.fpga_handle.fpga_handle_process_is_alive():
                 F = "⏩"
         except (AttributeError, ValueError, OSError):
             logger.debug('FPGA process status is unavailable', exc_info=True)

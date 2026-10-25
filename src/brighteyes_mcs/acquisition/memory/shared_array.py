@@ -11,7 +11,7 @@ from multiprocessing import shared_memory, Lock, Array
 import uuid
 
 
-class MemorySharedNumpyArray_ShmMem:
+class MemorySharedNumpyArrayShmMem:
     """
     A shared memory-backed NumPy array with optional multiprocessing lock.
     Compatible with the original multiprocessing.Array-based design.
@@ -79,7 +79,7 @@ class MemorySharedNumpyArray_ShmMem:
         """Return the shared memory block name."""
         return self.shm.name
 
-class MemorySharedNumpyArray_CTypes:
+class MemorySharedNumpyArrayCtypes:
     """
     A shared array based on multiprocessing.Array. You can get a Numpy handle
     to the shared array with get_numpy_handle().
@@ -143,5 +143,5 @@ class MemorySharedNumpyArray_CTypes:
         return self.lock
 
 
-MemorySharedNumpyArray = MemorySharedNumpyArray_CTypes
+MemorySharedNumpyArray = MemorySharedNumpyArrayCtypes
 

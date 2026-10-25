@@ -13,7 +13,7 @@ class Parameter(object):
         self.read_list = None
         self.write_list = None
         self.sock = None
-        self.PORT = None
+        self.port = None
 
     pass
 
@@ -26,8 +26,8 @@ class TtmRemoteManager(object):
         self.parameter.is_ready_flag = False
         self.parameter.external_app = None
 
-        self.parameter.HOST = ip  # Standard loopback interface address (localhost)
-        self.parameter.PORT = port  # with 0 the OS give a free non-privileged port (non-privileged ports are > 1023)
+        self.parameter.host = ip  # Standard loopback interface address (localhost)
+        self.parameter.port = port  # with 0 the OS give a free non-privileged port (non-privileged ports are > 1023)
 
         self.local_executable = local_executable
 
@@ -37,15 +37,15 @@ class TtmRemoteManager(object):
             logger.debug("%s %s", "popen", [
                         self.local_executable,
                         "tcp",
-                        self.parameter.HOST,
-                        str(self.parameter.PORT),
+                        self.parameter.host,
+                        str(self.parameter.port),
                     ])
             self.parameter.external_app = subprocess.Popen(
                 [
                     self.local_executable,
                     "tcp",
-                    self.parameter.HOST,
-                    str(self.parameter.PORT),
+                    self.parameter.host,
+                    str(self.parameter.port),
                 ]
             )
 
@@ -61,12 +61,12 @@ class TtmRemoteManager(object):
     def connect(self):
         logger.debug("Try to connect")
         self.parameter.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.parameter.sock.bind((self.parameter.HOST, self.parameter.PORT))
+        self.parameter.sock.bind((self.parameter.host, self.parameter.port))
         (
-            self.parameter.HOST,
-            self.PORT,
+            self.parameter.host,
+            self.port,
         ) = self.parameter.sock.getsockname()  # get the actual port
-        logger.debug("%s %s", self.parameter.HOST, self.parameter.PORT)
+        logger.debug("%s %s", self.parameter.host, self.parameter.port)
 
     def rw_loop(self):
         logger.debug("start thread")
