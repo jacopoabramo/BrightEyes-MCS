@@ -5,7 +5,13 @@ import dataclasses
 import numpy as np
 import pytest
 
-from brighteyes_mcs.acquisition.registers import ScanArea, Timing
+from brighteyes_mcs.acquisition.registers import (
+    ScanArea,
+    ScanPattern,
+    Timing,
+    circular_points_for_projection,
+    lissajous_offsets,
+)
 
 AREA = ScanArea(
     range_um=(10.0, 8.0, 2.0),
@@ -58,3 +64,128 @@ def test_timing_registers():
 def test_timing_truncates_cycle_counts():
     """Truncate cycle counts toward zero instead of rounding them."""
     assert Timing(0.37, 3, 0.0, 0.0, False).registers()["time_bin_dwell_cycles"] == 14
+
+
+def test_circular_voltage_points_are_calibrated_offset_and_projected():
+    """Scale circular volts by the calibration, add the offset and pick the projected axes."""
+    x_points, y_points = circular_points_for_projection(
+        registers={
+            "circular_scan_x_volts": [1.0, 2.0, 99.0],
+            "circular_scan_y_volts": [3.0, 4.0, 99.0],
+            "circular_scan_z_volts": [1.0, 2.0, 99.0],
+        },
+        projection="xz",
+        calibration=(2.0, 3.0, 4.0),
+        offset=(10.0, 20.0, 30.0),
+        point_count=2,
+    )
+
+    np.testing.assert_allclose(x_points, [12.0, 14.0])
+    np.testing.assert_allclose(y_points, [34.0, 38.0])
+
+
+def test_unit_lissajous_frequencies_generate_a_circle():
+    """Draw a circle when both frequencies are 1."""
+    x_offsets, y_offsets = lissajous_offsets(
+        radius=2.0,
+        point_count=4,
+        omega_x=1,
+        omega_y=1,
+    )
+
+    np.testing.assert_allclose(x_offsets, [2.0, 0.0, -2.0, 0.0], atol=1e-12)
+    np.testing.assert_allclose(y_offsets, [0.0, 2.0, 0.0, -2.0], atol=1e-12)
+
+
+def test_lissajous_frequencies_control_each_axis_independently():
+    """Apply each frequency to its own axis."""
+    x_offsets, y_offsets = lissajous_offsets(
+        radius=2.0,
+        point_count=4,
+        omega_x=2,
+        omega_y=1,
+    )
+
+    np.testing.assert_allclose(x_offsets, [2.0, -2.0, 2.0, -2.0], atol=1e-12)
+    np.testing.assert_allclose(y_offsets, [0.0, 2.0, 0.0, -2.0], atol=1e-12)
+
+
+def test_lissajous_phase_rotates_the_generated_curve():
+    """Rotate the curve by the phase."""
+    x_offsets, y_offsets = lissajous_offsets(
+        radius=2.0,
+        point_count=4,
+        omega_x=1,
+        omega_y=1,
+        phase_deg=90,
+    )
+
+    np.testing.assert_allclose(x_offsets, [0.0, -2.0, 0.0, 2.0], atol=1e-12)
+    np.testing.assert_allclose(y_offsets, [2.0, 0.0, -2.0, 0.0], atol=1e-12)
+
+
+def test_lissajous_first_position_rotates_the_output_array():
+    """Start the output arrays at the first position."""
+    x_offsets, y_offsets = lissajous_offsets(
+        radius=1.0,
+        point_count=4,
+        omega_x=1,
+        omega_y=1,
+        first_position=1,
+    )
+
+    np.testing.assert_allclose(x_offsets, [0.0, -1.0, 0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(y_offsets, [1.0, 0.0, -1.0, 0.0], atol=1e-12)
+
+
+def test_open_lissajous_uses_edge_to_edge_trajectory():
+    """Run an open curve from one edge to the opposite one."""
+    x_offsets, y_offsets = lissajous_offsets(
+        radius=2.0,
+        point_count=5,
+        omega_x=1,
+        omega_y=2,
+        open_curve=True,
+    )
+
+    t = np.linspace(0.0, 1.0, 5)
+    np.testing.assert_allclose(x_offsets, -2.0 * np.cos(3 * np.pi * t), atol=1e-12)
+    np.testing.assert_allclose(y_offsets, 2.0 * np.sin(2 * np.pi * t), atol=1e-12)
+    np.testing.assert_allclose(x_offsets[[0, -1]], [-2.0, 2.0])
+    np.testing.assert_allclose(y_offsets[[0, -1]], [0.0, 0.0], atol=1e-12)
+
+
+PATTERN = ScanPattern(radius_nm=500.0, point_count=4, calibration_um_per_volt=(5.0, 4.0, 2.0))
+
+
+def test_pattern_registers_are_volts_padded_to_32():
+    """Convert circle points to volts and pad each axis to 32 entries with its last value."""
+    registers = PATTERN.registers()
+    assert set(registers) == {
+        "circular_scan_x_volts",
+        "circular_scan_y_volts",
+        "circular_scan_z_volts",
+    }
+    np.testing.assert_allclose(
+        registers["circular_scan_x_volts"], [0.1, 0.0, -0.1] + [0.0] * 29, atol=1e-12
+    )
+    np.testing.assert_allclose(
+        registers["circular_scan_y_volts"], [0.0, 0.125, 0.0] + [-0.125] * 29, atol=1e-12
+    )
+    np.testing.assert_allclose(registers["circular_scan_z_volts"], [0.0] * 32)
+
+
+def test_pattern_ignores_lissajous_fields_when_off():
+    """Draw the unit circle whatever the Lissajous fields hold while Lissajous is off."""
+    bent = dataclasses.replace(
+        PATTERN, omega_x=3, omega_y=2, phase_deg=30.0, first_position=1, open_curve=True
+    )
+    for a, b in zip(bent.offsets_um(), PATTERN.offsets_um(), strict=True):
+        np.testing.assert_allclose(a, b)
+
+
+def test_pattern_uses_lissajous_fields_when_on():
+    """Pass the Lissajous fields to the trajectory while Lissajous is on."""
+    on = dataclasses.replace(PATTERN, lissajous=True, omega_x=2)
+    x, _y, _z = on.offsets_um()
+    np.testing.assert_allclose(x, [0.5, -0.5, 0.5, -0.5], atol=1e-12)

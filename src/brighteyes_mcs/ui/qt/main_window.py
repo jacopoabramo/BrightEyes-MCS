@@ -82,7 +82,13 @@ from .console_widget import ConsoleWidget
 from .graphics_shutdown import disable_viewbox_item_change_callbacks
 from .system_profile_dialog import SystemProfileDialog
 from ...acquisition.manager import McsManager
-from ...acquisition.registers import ScanArea, Timing
+from ...acquisition.registers import (
+    ScanArea,
+    ScanPattern,
+    Timing,
+    circular_points_for_projection,
+    lissajous_offsets,
+)
 from ..table_manager import TableManager
 
 from .dict_to_tree import TreeModel
@@ -114,6 +120,7 @@ from ...application.paths import (
     write_default_pointer,
 )
 
+import dataclasses
 import numpy as np
 import time
 
@@ -4032,83 +4039,6 @@ class MainWindow(QMainWindow):
             legend.clear()
         self._monitor_started_at = time.monotonic()
 
-    @staticmethod
-    def _circular_points_for_projection(
-        registers,
-        projection,
-        calibration,
-        offset,
-        point_count,
-        scan_range=None,
-        pixel_counts=None,
-    ):
-        """Add calibrated circular displacements to raster-pixel centers."""
-        arrays = []
-        for register_name in (
-            "circular_scan_x_volts",
-            "circular_scan_y_volts",
-            "circular_scan_z_volts",
-        ):
-            try:
-                array = np.asarray(
-                    registers.get(register_name, []), dtype=float
-                ).reshape(-1)
-            except (TypeError, ValueError):
-                return np.asarray([]), np.asarray([])
-            arrays.append(array)
-
-        count = min(
-            max(0, int(point_count)),
-            *(len(array) for array in arrays),
-        )
-        if count == 0:
-            return np.asarray([]), np.asarray([])
-
-        circular_displacements = [
-            arrays[axis][:count] * float(calibration[axis])
-            for axis in range(3)
-        ]
-        axes = {
-            "xy": (0, 1),
-            "yx": (1, 0),
-            "zy": (2, 1),
-            "yz": (1, 2),
-            "zx": (2, 0),
-            "xz": (0, 2),
-        }.get(projection, (0, 1))
-
-        if scan_range is None or pixel_counts is None:
-            raster_centers = [
-                np.asarray([float(offset[axis])]) for axis in range(3)
-            ]
-        else:
-            raster_centers = []
-            for axis in range(3):
-                axis_count = max(1, int(pixel_counts[axis]))
-                axis_range = float(scan_range[axis])
-                pixel_size = axis_range / axis_count
-                raster_centers.append(
-                    float(offset[axis])
-                    - axis_range / 2.0
-                    + (np.arange(axis_count, dtype=float) + 0.5)
-                    * pixel_size
-                )
-
-        projected_center_x, projected_center_y = np.meshgrid(
-            raster_centers[axes[0]],
-            raster_centers[axes[1]],
-            indexing="xy",
-        )
-        center_x = projected_center_x.reshape(-1, 1)
-        center_y = projected_center_y.reshape(-1, 1)
-        projected_x = (
-            center_x + circular_displacements[axes[0]].reshape(1, -1)
-        ).reshape(-1)
-        projected_y = (
-            center_y + circular_displacements[axes[1]].reshape(1, -1)
-        ).reshape(-1)
-        return projected_x, projected_y
-
     def updateCircularPoints(self):
         """Read, calibrate, offset, and display the circular voltage arrays."""
         registers = dict(self._latest_status_registers)
@@ -4130,7 +4060,7 @@ class MainWindow(QMainWindow):
             max(1, int(value)) for value in self.currentImage_pixels
         )
         point_count = self.ui.spinBox_circular_points.value()
-        x_points, y_points = self._circular_points_for_projection(
+        x_points, y_points = circular_points_for_projection(
             registers=registers,
             projection=projection,
             calibration=calibration,
@@ -4471,49 +4401,6 @@ class MainWindow(QMainWindow):
         ):
             self.circularMotionActivateChanged()
 
-    @staticmethod
-    def _lissajous_offsets(
-        radius,
-        point_count,
-        omega_x=1,
-        omega_y=1,
-        phase_deg=0,
-        first_position=0,
-        open_curve=False,
-    ):
-        """Return a rotated trajectory with the selected point at index zero."""
-        point_count = int(point_count)
-        if point_count <= 0:
-            return np.asarray([], dtype=float), np.asarray([], dtype=float)
-
-        if open_curve:
-            # The odd x frequency gives opposite x coordinates at the two
-            # endpoints, while the integer y frequency returns y to zero.
-            t = np.linspace(0.0, 1.0, point_count)
-            x_unrotated = (
-                -np.cos((2 * int(omega_x) + 1) * np.pi * t)
-                * float(radius)
-            )
-            y_unrotated = (
-                np.sin(int(omega_y) * np.pi * t) * float(radius)
-            )
-        else:
-            t = np.linspace(0, 2 * np.pi, point_count + 1)[:-1]
-            x_unrotated = np.cos(int(omega_x) * t) * float(radius)
-            y_unrotated = np.sin(int(omega_y) * t) * float(radius)
-        phase_rad = np.deg2rad(float(phase_deg))
-        cos_phase = np.cos(phase_rad)
-        sin_phase = np.sin(phase_rad)
-        x_values = (
-            x_unrotated * cos_phase - y_unrotated * sin_phase,
-            x_unrotated * sin_phase + y_unrotated * cos_phase,
-        )
-        first_index = int(first_position) % point_count
-        return (
-            np.roll(x_values[0], -first_index),
-            np.roll(x_values[1], -first_index),
-        )
-
     def updateLissajousMiniPlot(self):
         """Draw a normalized dense preview of the selected trajectory."""
         if self.ui.checkBox_lissajous.isChecked():
@@ -4546,7 +4433,7 @@ class MainWindow(QMainWindow):
         self.ui.spinBox_lissajous_firstposition.blockSignals(
             signals_were_blocked
         )
-        x_values, y_values = self._lissajous_offsets(
+        x_values, y_values = lissajous_offsets(
             radius=1.0,
             point_count=512,
             omega_x=omega_x,
@@ -4561,7 +4448,7 @@ class MainWindow(QMainWindow):
                 np.append(x_values, x_values[0]),
                 np.append(y_values, y_values[0]),
             )
-        sampled_x, sampled_y = self._lissajous_offsets(
+        sampled_x, sampled_y = lissajous_offsets(
             radius=1.0,
             point_count=selected_point_count,
             omega_x=omega_x,
@@ -4577,40 +4464,31 @@ class MainWindow(QMainWindow):
         )
         self.lissajous_mini_plot.autoRange(padding=0.08)
 
+    def _scan_pattern(self):
+        """Return the circular or Lissajous pattern set in the circular-scan widgets."""
+        return ScanPattern(
+            radius_nm=self.ui.spinBox_circular_radius_nm.value(),
+            point_count=self.ui.spinBox_circular_points.value(),
+            calibration_um_per_volt=(
+                self.ui.spinBox_calib_x.value(),
+                self.ui.spinBox_calib_y.value(),
+                self.ui.spinBox_calib_z.value(),
+            ),
+            lissajous=self.ui.checkBox_lissajous.isChecked(),
+            omega_x=self.ui.spinBox_lissajous_omega_x.value(),
+            omega_y=self.ui.spinBox_lissajous_omega_y.value(),
+            phase_deg=self.ui.spinBox_lissajous_phase_deg.value(),
+            first_position=self.ui.spinBox_lissajous_firstposition.value(),
+            open_curve=self.ui.checkBox_lissajous_opencurve.isChecked(),
+        )
+
     def define_circular(self, circular_points):
         """
         Define the points for the circular or Lissajous scan.
         """
-        radius = self.ui.spinBox_circular_radius_nm.value() / 1000.
-
-        calib_xx = self.ui.spinBox_calib_x.value()
-        calib_yy = self.ui.spinBox_calib_y.value()
-        calib_zz = self.ui.spinBox_calib_z.value()
-
-        if self.ui.checkBox_lissajous.isChecked():
-            open_curve = self.ui.checkBox_lissajous_opencurve.isChecked()
-            omega_x = self.ui.spinBox_lissajous_omega_x.value()
-            omega_y = self.ui.spinBox_lissajous_omega_y.value()
-            phase_deg = self.ui.spinBox_lissajous_phase_deg.value()
-            first_position = (
-                self.ui.spinBox_lissajous_firstposition.value()
-            )
-        else:
-            open_curve = False
-            omega_x = 1
-            omega_y = 1
-            phase_deg = 0
-            first_position = 0
-        self.X_array_um, self.Y_array_um = self._lissajous_offsets(
-            radius,
-            circular_points,
-            omega_x,
-            omega_y,
-            phase_deg,
-            first_position,
-            open_curve=open_curve,
-        )
-        self.Z_array_um = np.zeros(circular_points)
+        pattern = dataclasses.replace(self._scan_pattern(), point_count=circular_points)
+        self.X_array_um, self.Y_array_um, self.Z_array_um = pattern.offsets_um()
+        calib_xx, calib_yy, calib_zz = pattern.calibration_um_per_volt
 
         self.X_array = self.X_array_um / calib_xx
         self.Y_array = self.Y_array_um / calib_yy
@@ -4726,26 +4604,7 @@ class MainWindow(QMainWindow):
         # self.temporalSettingsChanged()
         # self.plotSettingsChanged()
 
-        X_arr = self.X_array
-        Y_arr = self.Y_array
-        Z_arr = self.Z_array
-
-        if X_arr.shape[0] < 32:
-            X_arr = np.pad(X_arr, (0, 32 - X_arr.shape[0]), mode="edge")
-
-        if Y_arr.shape[0] < 32:
-            Y_arr = np.pad(Y_arr, (0, 32 - Y_arr.shape[0]), mode="edge")
-
-        if Z_arr.shape[0] < 32:
-            Z_arr = np.pad(Z_arr, (0, 32 - Z_arr.shape[0]), mode="edge")
-
-        self.setRegistersDict(
-            {
-                "circular_scan_x_volts": X_arr,
-                "circular_scan_y_volts": Y_arr,
-                "circular_scan_z_volts": Z_arr,
-            }
-        )
+        self.setRegistersDict(self._scan_pattern().registers())
 
         # debug("Start")
         # self.currentImage = None

@@ -6,6 +6,7 @@ group sets, under their register names.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +15,7 @@ import numpy as np
 Triple = tuple[float, float, float]
 
 WAIT_CLOCK_HZ = 40e6
+CIRCULAR_REGISTER_LENGTH = 32
 
 
 @dataclass(frozen=True)
@@ -108,3 +110,154 @@ class Timing:
             "max_circular_point": self.circular_points,
             "max_circular_repetition": self.circular_repetitions,
         }
+
+
+def lissajous_offsets(
+    radius: float,
+    point_count: int,
+    omega_x: int = 1,
+    omega_y: int = 1,
+    phase_deg: float = 0,
+    first_position: int = 0,
+    open_curve: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a rotated trajectory with the selected point at index zero."""
+    point_count = int(point_count)
+    if point_count <= 0:
+        return np.asarray([], dtype=float), np.asarray([], dtype=float)
+
+    if open_curve:
+        # The odd x frequency gives opposite x coordinates at the two
+        # endpoints, while the integer y frequency returns y to zero.
+        t = np.linspace(0.0, 1.0, point_count)
+        x_unrotated = -np.cos((2 * int(omega_x) + 1) * np.pi * t) * float(radius)
+        y_unrotated = np.sin(int(omega_y) * np.pi * t) * float(radius)
+    else:
+        t = np.linspace(0, 2 * np.pi, point_count + 1)[:-1]
+        x_unrotated = np.cos(int(omega_x) * t) * float(radius)
+        y_unrotated = np.sin(int(omega_y) * t) * float(radius)
+    phase_rad = np.deg2rad(float(phase_deg))
+    cos_phase = np.cos(phase_rad)
+    sin_phase = np.sin(phase_rad)
+    x_values = (
+        x_unrotated * cos_phase - y_unrotated * sin_phase,
+        x_unrotated * sin_phase + y_unrotated * cos_phase,
+    )
+    first_index = int(first_position) % point_count
+    return (
+        np.roll(x_values[0], -first_index),
+        np.roll(x_values[1], -first_index),
+    )
+
+
+def circular_points_for_projection(
+    registers: Mapping[str, Any],
+    projection: str,
+    calibration: Sequence[float],
+    offset: Sequence[float],
+    point_count: int,
+    scan_range: Sequence[float] | None = None,
+    pixel_counts: Sequence[int] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Add calibrated circular displacements to raster-pixel centers."""
+    arrays = []
+    for register_name in (
+        "circular_scan_x_volts",
+        "circular_scan_y_volts",
+        "circular_scan_z_volts",
+    ):
+        try:
+            array = np.asarray(registers.get(register_name, []), dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            return np.asarray([]), np.asarray([])
+        arrays.append(array)
+
+    count = min(
+        max(0, int(point_count)),
+        *(len(array) for array in arrays),
+    )
+    if count == 0:
+        return np.asarray([]), np.asarray([])
+
+    circular_displacements = [arrays[axis][:count] * float(calibration[axis]) for axis in range(3)]
+    axes = {
+        "xy": (0, 1),
+        "yx": (1, 0),
+        "zy": (2, 1),
+        "yz": (1, 2),
+        "zx": (2, 0),
+        "xz": (0, 2),
+    }.get(projection, (0, 1))
+
+    if scan_range is None or pixel_counts is None:
+        raster_centers = [np.asarray([float(offset[axis])]) for axis in range(3)]
+    else:
+        raster_centers = []
+        for axis in range(3):
+            axis_count = max(1, int(pixel_counts[axis]))
+            axis_range = float(scan_range[axis])
+            pixel_size = axis_range / axis_count
+            raster_centers.append(
+                float(offset[axis])
+                - axis_range / 2.0
+                + (np.arange(axis_count, dtype=float) + 0.5) * pixel_size
+            )
+
+    projected_center_x, projected_center_y = np.meshgrid(
+        raster_centers[axes[0]],
+        raster_centers[axes[1]],
+        indexing="xy",
+    )
+    center_x = projected_center_x.reshape(-1, 1)
+    center_y = projected_center_y.reshape(-1, 1)
+    projected_x = (center_x + circular_displacements[axes[0]].reshape(1, -1)).reshape(-1)
+    projected_y = (center_y + circular_displacements[axes[1]].reshape(1, -1)).reshape(-1)
+    return projected_x, projected_y
+
+
+@dataclass(frozen=True)
+class ScanPattern:
+    """The circular or Lissajous path the scan repeats at each pixel.
+
+    While `lissajous` is false the path is the unit circle, whatever the other
+    Lissajous fields hold.
+    """
+
+    radius_nm: float
+    point_count: int
+    calibration_um_per_volt: Triple
+    lissajous: bool = False
+    omega_x: int = 1
+    omega_y: int = 1
+    phase_deg: float = 0.0
+    first_position: int = 0
+    open_curve: bool = False
+
+    def offsets_um(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return the x, y and z offsets of the path points in micrometres, z being zero."""
+        radius_um = self.radius_nm / 1000.0
+        if self.lissajous:
+            x, y = lissajous_offsets(
+                radius_um,
+                self.point_count,
+                self.omega_x,
+                self.omega_y,
+                self.phase_deg,
+                self.first_position,
+                open_curve=self.open_curve,
+            )
+        else:
+            x, y = lissajous_offsets(radius_um, self.point_count)
+        return x, y, np.zeros(self.point_count)
+
+    def registers(self) -> dict[str, Any]:
+        """Return the path in volts, each axis padded to 32 points by repeating its last one."""
+        registers = {}
+        for axis, offsets, calibration in zip(
+            "xyz", self.offsets_um(), self.calibration_um_per_volt, strict=True
+        ):
+            volts = offsets / calibration
+            if volts.shape[0] < CIRCULAR_REGISTER_LENGTH:
+                volts = np.pad(volts, (0, CIRCULAR_REGISTER_LENGTH - volts.shape[0]), mode="edge")
+            registers[f"circular_scan_{axis}_volts"] = volts
+        return registers
