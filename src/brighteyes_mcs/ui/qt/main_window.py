@@ -83,7 +83,9 @@ from .graphics_shutdown import disable_viewbox_item_change_callbacks
 from .system_profile_dialog import SystemProfileDialog
 from ...acquisition.manager import McsManager
 from ...acquisition.registers import (
+    LaserSettings,
     ScanArea,
+    ScanOptions,
     ScanPattern,
     Timing,
     circular_points_for_projection,
@@ -1897,13 +1899,36 @@ class MainWindow(QMainWindow):
         Slot for the Laser changed event
         """
         logger.debug("laserChanged")
-        self.setRegistersDict(
-            {
-                "laser_1_enable": self.ui.checkBox_laser0.isChecked(),
-                "laser_2_enable": self.ui.checkBox_laser1.isChecked(),
-                "laser_3_enable": self.ui.checkBox_laser2.isChecked(),
-                "laser_4_enable": self.ui.checkBox_laser3.isChecked(),
-            }
+        self.setRegistersDict(self._laser_settings().enable_registers())
+
+    def _laser_settings(self):
+        """Return the laser states and firing sequence set in the laser widgets."""
+        return LaserSettings(
+            enabled=(
+                self.ui.checkBox_laser0.isChecked(),
+                self.ui.checkBox_laser1.isChecked(),
+                self.ui.checkBox_laser2.isChecked(),
+                self.ui.checkBox_laser3.isChecked(),
+            ),
+            sequence=tuple(
+                int(getattr(self.ui, f"comboLaserSeq_{step}").currentText())
+                for step in range(1, 13)
+            ),
+        )
+
+    def _scan_options(self):
+        """Return the run flags set in the acquisition widgets."""
+        return ScanOptions(
+            circular_scan=self.ui.checkBox_circular.isChecked(),
+            dummy_data=self.ui.checkBox_DummyData.isChecked(),
+            slave_mode=self.ui.checkBox_slavemode_enable.isChecked(),
+            slave_source=self.ui.comboBox_slavemode_type.currentIndex(),
+            spad_vr0=self.ui.checkBox_SPAD_VR0.isChecked(),
+            # Reads VR0 as before: the VR1 box would change the values written to the FPGA and saved in files.
+            spad_vr1=self.ui.checkBox_SPAD_VR0.isChecked(),
+            snake_xy=self.ui.checkBox_snake.isChecked(),
+            snake_z=self.ui.checkBox_snake_z.isChecked(),
+            dfd_laser_debug=self.ui.checkBox_DFD_LaserDebug.isChecked(),
         )
 
     @Slot()
@@ -6544,44 +6569,6 @@ Have fun!
             )
         )
 
-        circular_motion = self.ui.checkBox_circular.isChecked()
-        dummy_data = self.ui.checkBox_DummyData.isChecked()
-
-        laser_seq_gui = [int(self.ui.comboLaserSeq_1.currentText()),
-                        int(self.ui.comboLaserSeq_2.currentText()),
-                        int(self.ui.comboLaserSeq_3.currentText()),
-                        int(self.ui.comboLaserSeq_4.currentText()),
-                        int(self.ui.comboLaserSeq_5.currentText()),
-                        int(self.ui.comboLaserSeq_6.currentText()),
-                        int(self.ui.comboLaserSeq_7.currentText()),
-                        int(self.ui.comboLaserSeq_8.currentText()),
-                        int(self.ui.comboLaserSeq_9.currentText()),
-                        int(self.ui.comboLaserSeq_10.currentText()),
-                        int(self.ui.comboLaserSeq_11.currentText()),
-                        int(self.ui.comboLaserSeq_12.currentText())
-                         ]
-
-        laser_sequence =  [laser_seq_gui[0],
-                           laser_seq_gui[1],
-                           laser_seq_gui[2],
-                           laser_seq_gui[3],
-                           laser_seq_gui[4],
-                           laser_seq_gui[5],
-                           laser_seq_gui[6],
-                           laser_seq_gui[7],
-                           laser_seq_gui[8],
-                           laser_seq_gui[9],
-                           laser_seq_gui[10],
-                           laser_seq_gui[11],
-                           0,0,0,0,0,0,0,0,0,0,0,0,
-                           ]
-
-        slave_mode = self.ui.checkBox_slavemode_enable.isChecked()
-        slave_type = self.ui.comboBox_slavemode_type.currentIndex()
-
-        vr0 = self.ui.checkBox_SPAD_VR0.isChecked()
-        vr1 = self.ui.checkBox_SPAD_VR0.isChecked()
-
         if self.spad_channels == 49:
             self.setRegistersDict(
                 {
@@ -6597,10 +6584,6 @@ Have fun!
 
         self._update_offset_voltage_labels()
 
-        laserEnable0 = self.ui.checkBox_laser0.isChecked()
-        laserEnable1 = self.ui.checkBox_laser1.isChecked()
-        laserEnable2 = self.ui.checkBox_laser2.isChecked()
-        laserEnable3 = self.ui.checkBox_laser3.isChecked()
         self.snake_walk_Activate_XY = self.ui.checkBox_snake.isChecked()
         self.snake_walk_Activate_Z = self.ui.checkBox_snake_z.isChecked()
         self.mcs_manager.set_activate_snake_walk_xy(self.snake_walk_Activate_XY)
@@ -6609,28 +6592,14 @@ Have fun!
             self.ui.spinBox_compensation_delay.value()
         )
 
-        laser_debug = self.ui.checkBox_DFD_LaserDebug.isChecked()
-
+        lasers = self._laser_settings()
         self.setRegistersDict(
             {
                 **self._timing().registers(),
-                "circular_scan_enable": circular_motion,
-                "dummy_data_enable": dummy_data,
-                "laser_excitation_sequence": laser_sequence,
-                "slave_mode_external_source_selector": slave_type,
-                "slave_mode_enable": slave_mode,
-                "spad_vr0_enable": vr0,
-                "spad_vr1_enable": vr1,
-                "xy_snake_scan_enable": self.snake_walk_Activate_XY,
-                "z_snake_scan_enable": self.snake_walk_Activate_Z,
-                "dfd_laser_sync_debug_enable": laser_debug,
-                # "AD5764_MaxBit": 1,
                 **self._scan_area().registers(),
-                "laser_1_enable": laserEnable0,
-                "laser_2_enable": laserEnable1,
-                "laser_3_enable": laserEnable2,
-                "laser_4_enable": laserEnable3,
-                "dfd_trigger_selector": 5, #IT MEANS GET DFD EVERY CIRCULAR SCANNING POINT THIS SHOULD NOT HARD-CODE
+                **lasers.enable_registers(),
+                **lasers.sequence_registers(),
+                **self._scan_options().registers(),
             }
         )
 

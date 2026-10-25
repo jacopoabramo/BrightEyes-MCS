@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 
 from brighteyes_mcs.acquisition.registers import (
+    LaserSettings,
     ScanArea,
+    ScanOptions,
     ScanPattern,
     Timing,
     circular_points_for_projection,
@@ -189,3 +191,39 @@ def test_pattern_uses_lissajous_fields_when_on():
     on = dataclasses.replace(PATTERN, lissajous=True, omega_x=2)
     x, _y, _z = on.offsets_um()
     np.testing.assert_allclose(x, [0.5, -0.5, 0.5, -0.5], atol=1e-12)
+
+
+def test_laser_enable_registers():
+    """Map the four laser check boxes to laser_1_enable to laser_4_enable."""
+    lasers = LaserSettings((True, False, True, False), tuple(range(1, 13)))
+    assert lasers.enable_registers() == {
+        "laser_1_enable": True,
+        "laser_2_enable": False,
+        "laser_3_enable": True,
+        "laser_4_enable": False,
+    }
+
+
+def test_laser_sequence_is_padded_to_24():
+    """Pad the twelve-step laser sequence with zeros to 24 entries."""
+    lasers = LaserSettings((False,) * 4, tuple(range(1, 13)))
+    assert lasers.sequence_registers() == {
+        "laser_excitation_sequence": list(range(1, 13)) + [0] * 12
+    }
+
+
+def test_scan_options_registers():
+    """Write the run flags under their register names, with the DFD trigger fixed at 5."""
+    options = ScanOptions(True, False, True, 1, True, False, True, False, True)
+    assert options.registers() == {
+        "circular_scan_enable": True,
+        "dummy_data_enable": False,
+        "slave_mode_enable": True,
+        "slave_mode_external_source_selector": 1,
+        "spad_vr0_enable": True,
+        "spad_vr1_enable": False,
+        "xy_snake_scan_enable": True,
+        "z_snake_scan_enable": False,
+        "dfd_laser_sync_debug_enable": True,
+        "dfd_trigger_selector": 5,
+    }

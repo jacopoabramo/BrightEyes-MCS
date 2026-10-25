@@ -16,6 +16,7 @@ Triple = tuple[float, float, float]
 
 WAIT_CLOCK_HZ = 40e6
 CIRCULAR_REGISTER_LENGTH = 32
+LASER_SEQUENCE_LENGTH = 24
 
 
 @dataclass(frozen=True)
@@ -261,3 +262,53 @@ class ScanPattern:
                 volts = np.pad(volts, (0, CIRCULAR_REGISTER_LENGTH - volts.shape[0]), mode="edge")
             registers[f"circular_scan_{axis}_volts"] = volts
         return registers
+
+
+@dataclass(frozen=True)
+class LaserSettings:
+    """Which of the four lasers are on, and the order in which they fire."""
+
+    enabled: tuple[bool, bool, bool, bool]
+    sequence: tuple[int, ...]
+
+    def enable_registers(self) -> dict[str, Any]:
+        """Return the on or off state of each laser."""
+        return {f"laser_{number}_enable": on for number, on in enumerate(self.enabled, 1)}
+
+    def sequence_registers(self) -> dict[str, Any]:
+        """Return the firing sequence, padded with zeros to 24 steps."""
+        sequence = list(self.sequence)
+        return {
+            "laser_excitation_sequence": sequence + [0] * (LASER_SEQUENCE_LENGTH - len(sequence))
+        }
+
+
+@dataclass(frozen=True)
+class ScanOptions:
+    """The flags of a run that no other settings group covers."""
+
+    circular_scan: bool
+    dummy_data: bool
+    slave_mode: bool
+    slave_source: int
+    spad_vr0: bool
+    spad_vr1: bool
+    snake_xy: bool
+    snake_z: bool
+    dfd_laser_debug: bool
+
+    def registers(self) -> dict[str, Any]:
+        """Return the flags under their register names."""
+        return {
+            "circular_scan_enable": self.circular_scan,
+            "dummy_data_enable": self.dummy_data,
+            "slave_mode_enable": self.slave_mode,
+            "slave_mode_external_source_selector": self.slave_source,
+            "spad_vr0_enable": self.spad_vr0,
+            "spad_vr1_enable": self.spad_vr1,
+            "xy_snake_scan_enable": self.snake_xy,
+            "z_snake_scan_enable": self.snake_z,
+            "dfd_laser_sync_debug_enable": self.dfd_laser_debug,
+            # 5 takes a DFD sample at every point of the circular scan.
+            "dfd_trigger_selector": 5,
+        }
