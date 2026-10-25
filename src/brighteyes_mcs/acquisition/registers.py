@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 
@@ -17,6 +17,24 @@ Triple = tuple[float, float, float]
 WAIT_CLOCK_HZ = 40e6
 CIRCULAR_REGISTER_LENGTH = 32
 LASER_SEQUENCE_LENGTH = 24
+
+ANALOG_OUTPUT_SOURCES: Final = (
+    "X",
+    "Y",
+    "Z",
+    "Constant",
+    "Laser 1",
+    "Laser 2",
+    "Laser 3",
+    "Laser 4",
+    "X2",
+    "Y2",
+    "Z2",
+)
+"""Sources an analog output can send, at the position of their selector value."""
+
+CONSTANT_SOURCE_SELECTOR: Final = 15
+"""Selector value of the "Constant" source, which differs from its position."""
 
 
 @dataclass(frozen=True)
@@ -311,4 +329,114 @@ class ScanOptions:
             "dfd_laser_sync_debug_enable": self.dfd_laser_debug,
             # 5 takes a DFD sample at every point of the circular scan.
             "dfd_trigger_selector": 5,
+        }
+
+
+@dataclass(frozen=True)
+class AuxiliaryAxis:
+    """One secondary axis (X2, Y2 or Z2), driven through an analog output."""
+
+    position_um: float
+    calibration_um_per_volt: float
+    extra_offset_volts: float
+    minimum_volts: float
+    maximum_volts: float
+
+    def volts(self) -> float | None:
+        """Return the output voltage of the position, or `None` when the calibration is zero.
+
+        The voltage is clamped between the two limits, in whichever order they
+        are given.
+        """
+        if self.calibration_um_per_volt == 0:
+            return None
+        voltage = self.position_um / self.calibration_um_per_volt + self.extra_offset_volts
+        lower, upper = sorted((self.minimum_volts, self.maximum_volts))
+        return min(max(voltage, lower), upper)
+
+
+@dataclass(frozen=True)
+class AnalogOutputs:
+    """What each of the eight analog outputs sends.
+
+    A source is a name from `ANALOG_OUTPUT_SOURCES`. An output whose source is
+    "Constant" sends its DC voltage.
+    """
+
+    sources: tuple[str, ...]
+    dc_volts: tuple[float, ...]
+
+    def registers(self) -> dict[str, Any]:
+        """Return the source selector and DC voltage of each output."""
+        registers: dict[str, Any] = {}
+        for channel, (source, volts) in enumerate(zip(self.sources, self.dc_volts, strict=True)):
+            registers[f"analog_output_{channel}_source_selector"] = (
+                CONSTANT_SOURCE_SELECTOR
+                if source == "Constant"
+                else ANALOG_OUTPUT_SOURCES.index(source)
+            )
+            registers[f"analog_output_{channel}_dc_volts"] = volts
+        return registers
+
+
+@dataclass(frozen=True)
+class AnalogInputs:
+    """How the four analog inputs are conditioned and which ones channels A and B read."""
+
+    integrate: tuple[bool, bool, bool, bool]
+    invert: tuple[bool, bool, bool, bool]
+    selector_a: int
+    selector_b: int
+    differential_a: bool
+    differential_b: bool
+
+    def registers(self) -> dict[str, Any]:
+        """Return the conditioning flags and the input selectors."""
+        registers: dict[str, Any] = {}
+        for channel, (integrate, invert) in enumerate(
+            zip(self.integrate, self.invert, strict=True)
+        ):
+            registers[f"analog_a_channel_{channel}_integrate_enable"] = integrate
+            registers[f"analog_a_channel_{channel}_invert_enable"] = invert
+        registers.update(
+            {
+                "analog_a_input_selector": self.selector_a,
+                "analog_b_input_selector": self.selector_b,
+                "analog_a_differential_mode_enable": self.differential_a,
+                "analog_b_differential_mode_enable": self.differential_b,
+            }
+        )
+        return registers
+
+
+@dataclass(frozen=True)
+class ScanLimits:
+    """The voltage range each main scan axis may not leave."""
+
+    minimum_volts: Triple
+    maximum_volts: Triple
+
+    def registers(self) -> dict[str, Any]:
+        """Return the minimum and maximum voltage of each axis."""
+        registers: dict[str, Any] = {}
+        for bound, values in (("min", self.minimum_volts), ("max", self.maximum_volts)):
+            for axis, value in zip("xyz", values, strict=True):
+                registers[f"{bound}_{axis}_volts"] = value
+        return registers
+
+
+@dataclass(frozen=True)
+class StreamSelection:
+    """Which data streams the FPGA sends during a run."""
+
+    dfd: bool
+    analog_fifo: bool
+    digital_fifo: bool
+
+    def registers(self) -> dict[str, Any]:
+        """Return the DFD and stream enable flags."""
+        return {
+            "dfd_enable": self.dfd,
+            "stream_out_aux_enable": self.analog_fifo,
+            "stream_out_main_enable": self.digital_fifo,
         }
