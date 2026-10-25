@@ -166,6 +166,13 @@ def make_widgets():
         "checkBox_pispad23ttmActivate": False,
         "doubleSpinBox_binsize": 10.0,
         "doubleSpinBox_maxlength": 2.0,
+        "spinBox_compensation_delay": 7,
+        "spinBox_FCSbins": 20,
+        "spinBox_clk_base_multiplier": 3,
+        "spinBox_pispad23ttm_stream_port": 9998,
+        "spinBox_pispad23ttm_uimg_batch": 64,
+        "lineEdit_pispad23_ip_addr": "10.0.0.5",
+        "spinBox_pispad23_port": 9997,
     }
     sequence = (1, 2, 4, 8, 3, 5, 6, 7, 9, 10, 11, 12)
     values.update({f"comboLaserSeq_{n}": laser for n, laser in enumerate(sequence, 1)})
@@ -210,6 +217,8 @@ def make_window(writes):
     window._mcs_saving_suppressed = False
     for name in COLLABORATORS:
         setattr(window, name, MagicMock())
+    window.defineFilename = MagicMock(return_value="C:/data/run.h5")
+    window.defineMetadataFilename = MagicMock(return_value="C:/data/run_only_metadata.h5")
     window.ttm_remote_is_up = MagicMock(return_value=False)
     window._current_detector_model = MagicMock(return_value="SPAD Array")
     window.setRegistersDict = lambda registers: writes.append(copy.deepcopy(registers))
@@ -272,10 +281,10 @@ def assert_same_value(actual: Any, expected: Any, name: str) -> None:
     """Assert that `actual` equals the recorded `expected` in value and type."""
     actual = to_json(actual)
     assert value_types(actual) == value_types(expected), name
-    if isinstance(expected, (bool, str)):
-        assert actual == expected, name
-    else:
+    if "float" in str(value_types(expected)):
         np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12, err_msg=name)
+    else:
+        assert actual == expected, name
 
 
 def assert_same_writes(actual, expected):
@@ -306,3 +315,26 @@ def test_harness_rejects_a_changed_value_type() -> None:
     """Fail the comparison when a value keeps its number but changes type."""
     with pytest.raises(AssertionError):
         assert_same_writes([{"max_pixel": 1}], [{"max_pixel": 1.0}])
+
+
+def record_start_settings() -> dict[str, Any]:
+    """Return the last arguments of each manager setter the start sequence calls."""
+    window = make_window([])
+    window.initializeAcquisition(do_not_save=True, do_run=True)
+    manager = window.mcs_manager
+    settings = {
+        name: [*args, *kwargs.values()]
+        for name, args, kwargs in manager.method_calls
+        if name.startswith("set_")
+    }
+    settings["pispad23_stream_port"] = manager.pispad23_stream_port
+    settings["pispad23_batch_size"] = manager.pispad23_batch_size
+    return to_json(settings)
+
+
+def test_start_sequence_settings_match_baseline() -> None:
+    """Pass the manager the same settings as before the move."""
+    actual = record_start_settings()
+    assert actual.keys() == BASELINE["start_settings"].keys()
+    for name, expected in BASELINE["start_settings"].items():
+        assert_same_value(actual[name], expected, name)
