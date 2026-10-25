@@ -8328,7 +8328,7 @@ Have fun!
 
         if filecfg != "":
             logger.debug("%s %s", "filecfg", filecfg)
-            mydict, _typed_configuration = self.configuration_controller.load(filecfg)
+            mydict = self.configuration_controller.load(filecfg)
             if mydict:
                 mydict = dict(mydict)
                 mydict.pop("load_firmware_once", None)
