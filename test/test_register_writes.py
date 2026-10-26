@@ -170,8 +170,8 @@ def make_widgets():
         "checkBox_uttmActivate": False,
         "checkBox_uttm_auto": False,
         "checkBox_pispad23ttmActivate": False,
-        "doubleSpinBox_binsize": 10.0,
-        "doubleSpinBox_maxlength": 2.0,
+        "doubleSpinBox_binsize": 0.013,
+        "doubleSpinBox_maxlength": 0.0021,
         "spinBox_compensation_delay": 7,
         "spinBox_FCSbins": 20,
         "spinBox_clk_base_multiplier": 3,
@@ -484,6 +484,7 @@ def test_start_pulses_run_command(manager: McsManager) -> None:
 
 
 def test_test_mode_start_writes_no_streams() -> None:
-    """Write neither stream enables nor the start command in the test-mode start."""
-    writes, _ = record_start(do_run=False)
+    """Write neither stream enables nor the start command, and select no FIFOs, in the test-mode start."""
+    writes, manager = record_start(do_run=False)
     assert_same_writes(writes, BASELINE["start"][:7])
+    assert manager.activated_fifos_list == []
