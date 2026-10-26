@@ -68,7 +68,6 @@ BrightEyes-MCS/
 ├── test/                    Unit, integration, Qt and hardware-facing tests
 ├── docs/                    Architecture, register and HDF5 documentation
 ├── scripts/                 Developer distribution and conversion tools
-├── blueskyproject_mcs/      Separate Bluesky/Ophyd register-map project
 ├── data/                    Placeholder data directory
 ├── dist/                    Local wheel and source-distribution build output
 ├── pyproject.toml           Authoritative package metadata and dependencies
@@ -76,9 +75,8 @@ BrightEyes-MCS/
 ```
 
 Only packages matching `brighteyes_mcs*` are included by the root build.
-`blueskyproject_mcs`, the top-level `scripts/` directory, tests, and local build
-output are not importable parts of the
-installed application package.
+The top-level `scripts/` directory, tests, and local build output are not
+importable parts of the installed application package.
 
 ## Package ownership
 
@@ -431,7 +429,6 @@ not yet a complete isolation boundary.
 | `nifpga-fast-fifo-recv` | Required native Rust FIFO receiver used by the SPAD NI-FPGA path. This is separate from the Rust Cython-replacement repository. |
 | `nifpga` and NI drivers | Required hardware interface. Drivers and bitfiles are installed/provided separately and are not distributed in the Python wheel. |
 | `brighteyes-mcs-reader` | Listed by the root package; the bundled `src/brighteyes_mcs/scripts/shift_vectors.py` ScriptLauncher utility uses it. |
-| `blueskyproject_mcs/` | Stand-alone `brighteyes-bluesky` package exposing the low-level register map as an Ophyd device. It does not implement or currently drive the main acquisition orchestration. |
 
 Although local bitfiles may appear under `src/brighteyes_mcs/bitfiles`, only the
 placeholder is tracked and the root package-data list does not include firmware.
