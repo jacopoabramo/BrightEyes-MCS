@@ -26,6 +26,7 @@ from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, Re
 from brighteyes_mcs.services.registers import (
     NO_DESCRIPTION,
     RegisterSpec,
+    WholeFloat,
     load_descriptions,
     register_specs,
 )
@@ -65,6 +66,9 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
 
     async def send(self, attr: AttrW[Any, RegisterRef], value: Any) -> None:
         """Write `value`; when the board refuses it, show what the register holds and raise."""
+        if isinstance(attr.datatype, WholeFloat):
+            # The attribute holds a double, but the board takes only integers.
+            value = int(value)
         try:
             await self.backend.write(attr.io_ref.name, value)
         except Exception:
@@ -77,7 +81,8 @@ class McsController(Controller):
 
     A register's attribute is refreshed after each write the backend reports,
     from any thread, and indicators are read again every `INDICATOR_PERIOD`
-    seconds.
+    seconds. A written register whose read-back found the board busy is read
+    again with the indicators until a read succeeds.
     """
 
     def __init__(
@@ -88,6 +93,7 @@ class McsController(Controller):
         self.indicators = [spec.name for spec in specs if not spec.writable]
         self.loop: asyncio.AbstractEventLoop | None = None
         self.tasks: set[asyncio.Task[None]] = set()
+        self.pending: set[str] = set()
         self.simulated = AttrR(Bool(), initial_value=simulated)
         self.registers = Controller(ios=[RegisterIO(backend, self.read_back)])
         for spec in specs:
@@ -118,7 +124,10 @@ class McsController(Controller):
             return
         # The loop can close between the check and the call while the service stops.
         with contextlib.suppress(RuntimeError):
-            loop.call_soon_threadsafe(self.start, self.read_back(name))
+            loop.call_soon_threadsafe(self.read_back_soon, name)
+
+    def read_back_soon(self, name: str) -> None:
+        self.start(self.read_back(name))
 
     def start(self, coroutine: Awaitable[None]) -> None:
         task = asyncio.ensure_future(coroutine)
@@ -126,7 +135,11 @@ class McsController(Controller):
         task.add_done_callback(self.tasks.discard)
 
     async def read_back(self, name: str) -> None:
-        """Refresh one register, logging a read that fails."""
+        """Refresh one register, logging a read that fails.
+
+        The register is read again with the indicators until a read returns it.
+        """
+        self.pending.add(name)
         try:
             await self.refresh([name])
         except Exception:
@@ -141,6 +154,7 @@ class McsController(Controller):
         values = await self.backend.read(names)
         if values is None:
             return
+        self.pending.difference_update(values)
         for name, value in values.items():
             try:
                 await self.registers.attributes[name].update(value)
@@ -152,7 +166,7 @@ class McsController(Controller):
         while True:
             await asyncio.sleep(INDICATOR_PERIOD)
             try:
-                await self.refresh(self.indicators)
+                await self.refresh([*self.indicators, *self.pending])
             except Exception:
                 if not failing:
                     logger.warning("Reading the indicator registers failed", exc_info=True)
@@ -188,20 +202,30 @@ def parse_options(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 async def serve(controller: McsController, prefix: str) -> None:
-    """Serve `controller` over PVAccess until the session, or Ctrl+C, stops the service."""
+    """Serve `controller` over PVAccess until the session, or Ctrl+C, stops the service.
+
+    Raises
+    ------
+    Exception
+        The error that ended serving before the stop, such as a controller
+        that failed to connect.
+    """
     faulthandler.dump_traceback_later(TRACEBACK_DELAY)
     controller.set_path([prefix])
     control_system = FastCS(controller, [EpicsPVATransport()])
     serve_task = asyncio.ensure_future(control_system.serve(interactive=False))
     ready_task = asyncio.ensure_future(ready_when_reachable(f"{prefix}:PVI"))
     ready_task.add_done_callback(lambda _: faulthandler.cancel_dump_traceback_later())
+    stop_task = asyncio.ensure_future(wait_for_stop())
     try:
-        await wait_for_stop()
+        await asyncio.wait({serve_task, stop_task}, return_when=asyncio.FIRST_COMPLETED)
+        if serve_task.done():
+            serve_task.result()
     finally:
         faulthandler.dump_traceback_later(TRACEBACK_DELAY)
-        ready_task.cancel()
-        serve_task.cancel()
-        await asyncio.gather(serve_task, ready_task, return_exceptions=True)
+        for task in (ready_task, serve_task, stop_task):
+            task.cancel()
+        await asyncio.gather(serve_task, ready_task, stop_task, return_exceptions=True)
         faulthandler.cancel_dump_traceback_later()
 
 
@@ -242,8 +266,8 @@ def stop_board(manager: McsManager | None, deadline: float) -> bool:
 def main(argv: list[str] | None = None) -> int:
     """Serve the registers of the board until the session stops the service.
 
-    Returns 1 when the bitfile cannot be read or the board cannot be
-    connected, and 0 once the service has stopped.
+    Returns 1 when the bitfile cannot be read, the board cannot be connected
+    or serving ends with an error, and 0 once the service has stopped.
     """
     configure_logging()
     options = parse_options(argv)
@@ -277,6 +301,9 @@ def main(argv: list[str] | None = None) -> int:
         # Ctrl+C, the way a service run on its own is stopped, is a clean stop.
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(serve(controller, options.prefix.rstrip(":") or options.name))
+    except Exception:
+        logger.exception("Serving the registers failed")
+        return 1
     finally:
         stop_board(manager, STOP_DEADLINE)
     return 0

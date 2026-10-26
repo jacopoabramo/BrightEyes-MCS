@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol
 
 from brighteyes_mcs.acquisition.manager import McsManager, _pispad23_nifpga_dimension_registers
@@ -59,14 +60,18 @@ class ManagerRegisters:
     """Registers of the board an `McsManager` holds.
 
     This is the only place the service calls the synchronous manager: each
-    call runs in a worker thread, so the event loop never waits on the board.
+    call runs on a thread pool the backend owns, so the event loop never waits
+    on the board, and a call stuck on the board does not keep the loop from
+    closing, as one on the loop's default pool would.
     """
 
     def __init__(self, manager: McsManager) -> None:
         self.manager = manager
+        self.executor = ThreadPoolExecutor(thread_name_prefix="mcs-board")
 
     async def read(self, names: Sequence[str]) -> dict[str, Any] | None:
-        return await asyncio.to_thread(self.read_now, list(names))
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self.executor, self.read_now, list(names))
 
     def read_now(self, names: list[str]) -> dict[str, Any] | None:
         with self.manager.fpga_access(wait=False) as acquired:
@@ -81,7 +86,8 @@ class ManagerRegisters:
             )
 
     async def write(self, name: str, value: Any) -> None:
-        await asyncio.to_thread(self.manager.set_registers_dict, {name: value})
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(self.executor, self.manager.set_registers_dict, {name: value})
 
     def on_write(self, listener: Callable[[str], None]) -> None:
         """Call `listener` after each write the manager's FPGA handle makes.

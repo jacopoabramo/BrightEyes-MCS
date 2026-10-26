@@ -2,11 +2,13 @@
 
 import asyncio
 import threading
+import time
 from collections import defaultdict
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import nifpga
+import pytest
 
 from brighteyes_mcs.acquisition.detectors.models import DETECTOR_PISPAD23
 from brighteyes_mcs.acquisition.manager import McsManager
@@ -135,3 +137,23 @@ def test_dict_registers_skip_defaults_left_unset() -> None:
     values = DictRegisters(fake_specs(), {"max_pixel": None}).values
 
     assert values["max_pixel"] == 0
+
+
+def test_a_stuck_write_does_not_hold_up_the_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the event loop close while a write waits on the board."""
+    manager = connected_manager()
+    release = threading.Event()
+    monkeypatch.setattr(manager, "set_registers_dict", lambda registers: release.wait())
+    backend = ManagerRegisters(manager)
+
+    async def main() -> None:
+        write = asyncio.ensure_future(backend.write("max_pixel", 1))
+        await asyncio.sleep(0.05)
+        write.cancel()
+
+    started = time.monotonic()
+    try:
+        asyncio.run(main())
+        assert time.monotonic() - started < 1
+    finally:
+        release.set()
