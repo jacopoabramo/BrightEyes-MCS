@@ -220,3 +220,57 @@ def test_a_derive_failure_is_logged_once(caplog: pytest.LogCaptureFixture) -> No
 
     failures = [record for record in caplog.records if "analog_out.2.source" in record.getMessage()]
     assert len(failures) == 1
+
+
+def test_a_raw_write_to_an_auxiliary_output_moves_its_position() -> None:
+    """Show a raw DC write on an output sending X2 as a new X2 position."""
+    backend = DictRegisters(settings_specs(), window_registers())
+
+    async def body(controller: McsController) -> None:
+        await controller.registers.attributes["analog_output_4_dc_volts"].put(2.0)
+
+        await controller.setting_attributes["aux.x2.position_um"].wait_for_value(2.0, timeout=0.5)
+
+    serve_settings(backend, body)
+
+
+def test_a_clamped_auxiliary_position_reads_back_clamped() -> None:
+    """Serve the position the clamped voltage gives, not the one put."""
+    backend = DictRegisters(settings_specs(), window_registers())
+
+    async def body(controller: McsController) -> None:
+        await controller.setting_attributes["aux.x2.position_um"].put(1000.0)
+
+        assert setting(controller, "aux.x2.position_um") == pytest.approx(10.0)
+
+    serve_settings(backend, body)
+
+
+def test_a_raw_put_and_a_setting_put_sent_together_end_consistent() -> None:
+    """Leave a step matching both a raw pixel put and a range put sent together."""
+    backend = SlowRegisters(settings_specs(), window_registers())
+
+    async def body(controller: McsController) -> None:
+        await asyncio.gather(
+            controller.registers.attributes["max_pixel"].put(128),
+            controller.setting_attributes["scanner.x.range_um"].put(20.0),
+        )
+
+    serve_settings(backend, body)
+
+    assert backend.values["axis_calibration_volts_per_step"][0] == pytest.approx(20 / 5 / 128)
+
+
+def test_a_put_computing_a_value_that_is_not_finite_writes_nothing() -> None:
+    """Refuse a put whose step divides by a pixel count of zero, before any write."""
+    registers = window_registers()
+    registers["max_pixel"] = 0
+    backend = StubBackend(registers)
+
+    async def body(controller: McsController) -> None:
+        with pytest.raises(ValueError):
+            await controller.setting_attributes["grid.lines"].put(16)
+
+    serve_settings(backend, body)
+
+    assert backend.written == []
