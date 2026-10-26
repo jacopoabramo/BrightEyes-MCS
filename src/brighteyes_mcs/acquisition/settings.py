@@ -9,6 +9,7 @@ from .registers import (
     AnalogInputs,
     AnalogOutputs,
     LaserSettings,
+    OffsetPattern,
     ScanArea,
     ScanLimits,
     ScanOptions,
@@ -72,7 +73,7 @@ class AcquisitionConfig:
 
     scan_area: ScanArea
     timing: Timing
-    pattern: ScanPattern
+    pattern: ScanPattern | OffsetPattern
     lasers: LaserSettings
     options: ScanOptions
     analog_outputs: AnalogOutputs

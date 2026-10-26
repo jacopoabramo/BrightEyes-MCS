@@ -284,12 +284,42 @@ class ScanPattern:
 
     def registers(self) -> dict[str, Any]:
         """Return the path in volts, each axis padded to 32 points by repeating its last one."""
-        registers = {}
-        for axis, volts in zip("xyz", self.volts(), strict=True):
-            if volts.shape[0] < CIRCULAR_REGISTER_LENGTH:
-                volts = np.pad(volts, (0, CIRCULAR_REGISTER_LENGTH - volts.shape[0]), mode="edge")
-            registers[f"circular_scan_{axis}_volts"] = volts
-        return registers
+        return path_registers(self.volts())
+
+
+@dataclass(frozen=True, eq=False)
+class OffsetPattern:
+    """A path the scan repeats at each pixel, given as the offsets of its points."""
+
+    offsets_um: tuple[np.ndarray, np.ndarray, np.ndarray]
+    calibration_um_per_volt: Triple
+
+    def volts(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return the x, y and z voltages of the path points."""
+        x, y, z = (
+            np.asarray(offsets, float) / calibration
+            for offsets, calibration in zip(
+                self.offsets_um, self.calibration_um_per_volt, strict=True
+            )
+        )
+        return x, y, z
+
+    def registers(self) -> dict[str, Any]:
+        """Return the path in volts, each axis padded to 32 points by repeating its last one."""
+        return path_registers(self.volts())
+
+
+def path_registers(volts: tuple[np.ndarray, np.ndarray, np.ndarray]) -> dict[str, Any]:
+    """Return the circular scan registers of a path in volts, each padded to 32 points.
+
+    An axis shorter than 32 points is padded by repeating its last point.
+    """
+    registers = {}
+    for axis, values in zip("xyz", volts, strict=True):
+        if values.shape[0] < CIRCULAR_REGISTER_LENGTH:
+            values = np.pad(values, (0, CIRCULAR_REGISTER_LENGTH - values.shape[0]), mode="edge")
+        registers[f"circular_scan_{axis}_volts"] = values
+    return registers
 
 
 @dataclass(frozen=True)

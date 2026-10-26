@@ -8,6 +8,7 @@ writes for the same value.
 
 from __future__ import annotations
 
+import dataclasses
 import enum
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
@@ -24,12 +25,21 @@ from brighteyes_mcs.acquisition.registers import (
     AnalogOutputs,
     AuxiliaryAxis,
     LaserSettings,
+    OffsetPattern,
     ScanArea,
     ScanLimits,
     ScanOptions,
     WAIT_CLOCK_HZ,
     StreamSelection,
     Timing,
+    run_registers,
+)
+from brighteyes_mcs.acquisition.settings import (
+    AcquisitionConfig,
+    DetectorConfig,
+    DfdConfig,
+    LiveAnalysis,
+    OutputConfig,
 )
 
 Settings = dict[str, Any]
@@ -49,6 +59,56 @@ COUNT_REGISTERS: Final = {"x": "max_pixel", "y": "max_line", "z": "max_frame"}
 
 #: Registers whose value the run sets, which no setting writes.
 RUN_REGISTERS: Final = ("max_repetition", "dfd_trigger_selector")
+
+#: Registers only the run commands write.
+COMMAND_REGISTERS: Final = ("start_command", "stop_command")
+
+#: Lock group of each top-level group of settings. A run holds groups A and B.
+LOCK_GROUPS: Final = {
+    "grid": "A",
+    "pattern": "A",
+    "detector": "A",
+    "analog_in": "A",
+    "scanner": "B",
+    "timing": "B",
+    "aux": "C",
+    "lasers": "C",
+    "analog_out": "C",
+}
+
+#: The window's default live analysis, DFD values and snake delay.
+LIVE: Final = LiveAnalysis(
+    trace_bin_ms=10.0, trace_length_s=300.0, correlation_bins=20, show_preview=True
+)
+DFD: Final = DfdConfig(bins=81, clock_multiplier=1)
+SNAKE_DELAY: Final = 0
+
+#: The window's default PI23 connection.
+PISPAD23_HOST: Final = "127.0.0.1"
+PISPAD23_PORT: Final = 9997
+PISPAD23_STREAM_PORT: Final = 19000
+PISPAD23_BATCH_SIZE: Final = 4096
+
+#: A detector for computing register values, which use only its channel count.
+NO_DETECTOR: Final = DetectorConfig(
+    model="",
+    channels=25,
+    address="",
+    bitfile="",
+    pispad23_host=PISPAD23_HOST,
+    pispad23_port=PISPAD23_PORT,
+    pispad23_stream_port=PISPAD23_STREAM_PORT,
+    pispad23_batch_size=PISPAD23_BATCH_SIZE,
+)
+
+
+@dataclass(frozen=True)
+class RunSettings:
+    """What the next run captures beside the settings: its repetitions and its file."""
+
+    repetitions: int
+    filename: str
+    save: bool
 
 
 class Source(enum.Enum):
@@ -263,13 +323,16 @@ def output_volts(settings: Settings, channel: int) -> float:
     return volts
 
 
-def all_registers(settings: Settings) -> dict[str, Any]:
-    """Return every register value the settings set, in the order a run writes them.
+def run_config(settings: Settings, run: RunSettings, detector: DetectorConfig) -> AcquisitionConfig:
+    """Return the configuration of a run from the settings, the run settings and the detector.
+
+    The detector's channel count follows `detector.channels_49`, and the live
+    analysis and DFD values are the window's defaults.
 
     Raises
     ------
     ZeroDivisionError
-        When a calibration is zero.
+        When a scanner calibration is zero.
     """
 
     def triple(name: str) -> tuple[float, float, float]:
@@ -287,7 +350,7 @@ def all_registers(settings: Settings) -> dict[str, Any]:
         pixels=settings["grid.pixels"],
         lines=settings["grid.lines"],
         frames=settings["grid.frames"],
-        repetitions=0,
+        repetitions=run.repetitions,
     )
     timing = Timing(
         time_resolution_us=settings["timing.time_resolution_us"],
@@ -318,7 +381,7 @@ def all_registers(settings: Settings) -> dict[str, Any]:
         snake_xy=settings["pattern.snake_xy"],
         snake_z=settings["pattern.snake_z"],
         dfd_laser_debug=settings["detector.dfd_laser_debug"],
-        snake_delay=0,
+        snake_delay=SNAKE_DELAY,
     )
     outputs = AnalogOutputs(
         sources=tuple(settings[f"analog_out.{channel}.source"].value for channel in OUTPUTS),
@@ -349,27 +412,58 @@ def all_registers(settings: Settings) -> dict[str, Any]:
         digital_fifo=settings["detector.digital_fifo"],
     )
 
-    registers: dict[str, Any] = {
-        f"circular_scan_{axis}_volts": np.asarray(settings[f"pattern.offsets_{axis}_um"], float)
-        / calibration[index]
-        for index, axis in enumerate(AXES)
-    }
-    registers.update(timing.registers())
-    registers["detector_49_channel_mode_enable"] = settings["detector.channels_49"]
-    for group in (
-        area.registers(),
-        lasers.enable_registers(),
-        lasers.sequence_registers(),
-        options.registers(),
-        limits.registers(),
-        outputs.registers(),
-        inputs.registers(),
-        streams.registers(),
-    ):
+    offsets = (
+        settings["pattern.offsets_x_um"],
+        settings["pattern.offsets_y_um"],
+        settings["pattern.offsets_z_um"],
+    )
+    return AcquisitionConfig(
+        scan_area=area,
+        timing=timing,
+        pattern=OffsetPattern(offsets, calibration),
+        lasers=lasers,
+        options=options,
+        analog_outputs=outputs,
+        analog_inputs=inputs,
+        limits=limits,
+        streams=streams,
+        detector=dataclasses.replace(
+            detector, channels=49 if settings["detector.channels_49"] else 25
+        ),
+        output=OutputConfig(filename=run.filename, save=run.save, raw_stream=False, raw_files={}),
+        live=LIVE,
+        dfd=DFD,
+    )
+
+
+def all_registers(settings: Settings) -> dict[str, Any]:
+    """Return every register value the settings set, in the order a run writes them.
+
+    The pattern's offsets are included even while the pattern is off.
+
+    Raises
+    ------
+    ZeroDivisionError
+        When a calibration is zero.
+    """
+    config = run_config(settings, RunSettings(repetitions=0, filename="", save=False), NO_DETECTOR)
+    registers = config.pattern.registers()
+    for group in run_registers(config):
         registers.update(group)
     for name in RUN_REGISTERS:
         del registers[name]
     return registers
+
+
+def held_during_run(path: str) -> bool:
+    """Return whether a run holds the setting `path`, so that a put of it is refused."""
+    return LOCK_GROUPS[path.split(".")[0]] in ("A", "B")
+
+
+def guarded_registers() -> frozenset[str]:
+    """Return the registers a raw put of is refused during a run."""
+    held = (SETTINGS[path].writes for path in SETTINGS if held_during_run(path))
+    return frozenset(RUN_REGISTERS).union(COMMAND_REGISTERS, *held)
 
 
 def writes(path: str, settings: Settings) -> tuple[str, ...]:
