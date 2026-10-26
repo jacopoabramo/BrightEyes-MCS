@@ -93,6 +93,10 @@ class SoftwareTriggerSession:
                 self._wake.wait(0.1)
                 self._wake.clear()
         except Exception as error:
+            if self._stopped.is_set():
+                # A pass that outlived stop() sees the workers the window's stop shut down.
+                logger.warning("Software-trigger loop pass after stop failed: %s", error)
+                return
             logger.exception("Software-trigger loop failed")
             self.error = str(error)
             self.state = "error"

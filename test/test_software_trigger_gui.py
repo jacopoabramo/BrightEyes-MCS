@@ -137,7 +137,7 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         assert window.mcs_manager.registers_configuration["axis_start_offset_volts"] == offsets
         for fifo in window.mcs_manager.activated_fifos_list:
             window.mcs_manager.shared_dict[f"software_trigger_frames_{fifo}"] = 1
-        wait_until(lambda: controller.session.completed == 1)
+        wait_until(lambda: controller.session.completed == 1 and controller.session.awaiting_trigger)
         controller.refresh()
         assert ("Frames completed: 1" if preview else "1/6") in controller.label.text()
         assert ui.pushButton_sw_trigger_cmd.isEnabled()
@@ -176,11 +176,25 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         window.mcs_manager.read_registers_dict()
         controller.arm()
         window.stop = MagicMock()
-        controller.session.error = "boom"
-        controller.session.state = "error"
-        controller.refresh()
-        controller.refresh()
-        window.stop.assert_called_once_with()
+        if preview:
+            # A geometry write that fails on the GUI thread stops the window once.
+            window.mcs_manager.fpga_handle.register_write_checked.side_effect = RuntimeError("write failed")
+            window.setRegistersDict({"axis_start_offset_volts": [4, 5, 6]})
+            controller.refresh()
+            window.stop.assert_called_once_with()
+            assert controller.session.error == "write failed"
+            window.mcs_manager.fpga_handle.register_write_checked.side_effect = None
+        else:
+            # The loop sets the state before the message; wait until it has ended.
+            controller.session.state = "error"
+            controller.refresh()
+            window.stop.assert_not_called()
+            controller.session.error = "boom"
+            controller.session.stop()
+            controller.refresh()
+            controller.refresh()
+            window.stop.assert_called_once_with()
+            assert "boom" in controller.label.text()
         assert not controller.timer.isActive()
         controller.before_stop()
         controller.finish()
