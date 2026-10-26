@@ -13,6 +13,11 @@ from fastcs.controllers import Controller
 from fastcs.datatypes import Bool, Int, String
 from fastcs.methods import command
 
+from brighteyes_mcs.acquisition.detectors.models import (
+    DETECTOR_DISABLED,
+    detector_uses_nifpga_fifo,
+    normalize_detector_model,
+)
 from brighteyes_mcs.acquisition.registers import run_registers
 from brighteyes_mcs.acquisition.settings import DetectorConfig
 from brighteyes_mcs.logging_setup import logger
@@ -121,11 +126,18 @@ class RunController(Controller):
         RuntimeError
             While a run is in progress.
         ValueError
-            When `save` is on and `filename` is empty.
+            When `save` is on and `filename` is empty, or when the nifpga FIFO
+            does not read the detector and the detector is not disabled.
         """
         async with self.lock:
             if self.running.get():
                 raise RuntimeError(RUN_IN_PROGRESS)
+            model = self.detector.model
+            if not (
+                detector_uses_nifpga_fifo(model)
+                or normalize_detector_model(model) == DETECTOR_DISABLED
+            ):
+                raise ValueError(f"runs with this detector stay in the window: {model}")
             if self.save.get() and not self.filename.get():
                 raise ValueError("save is on but no file name is set")
             await self.running.update(True)

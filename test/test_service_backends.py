@@ -275,6 +275,26 @@ def test_manager_registers_report_a_dead_worker() -> None:
     assert status.workers_alive is False
 
 
+def test_manager_registers_report_done_when_the_loop_ends_between_reads() -> None:
+    """Report a run done when the loop sets the done flag and exits while the status is read."""
+    manager = MagicMock(spec=McsManager)
+    manager.activated_fifos_list = []
+    manager.process_supervisor = MagicMock()
+    loop = {"done": False}
+
+    def is_alive(name: str) -> bool:
+        loop["done"] = True
+        return False
+
+    manager.process_supervisor.is_alive.side_effect = is_alive
+    manager.acquisition_is_done.side_effect = lambda: loop["done"]
+    backend = ManagerRegisters(manager)
+
+    status = asyncio.run(backend.run_status())
+
+    assert status.done is True
+
+
 def test_manager_registers_ignore_a_worker_never_started() -> None:
     """Report the workers as alive when the run registered none, as with no detector."""
     manager = MagicMock(spec=McsManager)

@@ -3,11 +3,17 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 
 import nifpga
 import pytest
 
+from brighteyes_mcs.acquisition.detectors.models import (
+    DETECTOR_PISPAD23,
+    DETECTOR_PISPAD23_TS_UIMG,
+)
+from brighteyes_mcs.acquisition.settings import DetectorConfig
 from brighteyes_mcs.services.backends import DictRegisters, RegisterBackend, RunStatus
 from brighteyes_mcs.services.mcs import McsController
 from brighteyes_mcs.services.registers import RegisterSpec, register_specs
@@ -18,6 +24,9 @@ from test.window_settings import window_config
 
 #: Repetitions that keep a simulated run going far longer than any test.
 LONG_RUN = 10**6
+
+#: The detector the window reads unless told otherwise.
+WINDOW_DETECTOR = window_config().detector
 
 
 def run_specs() -> list[RegisterSpec]:
@@ -32,11 +41,13 @@ def quick_registers() -> dict[str, Any]:
     return {**window_registers(), "max_pixel": 4, "max_line": 4, "max_frame": 1}
 
 
-def serve_run(backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]) -> None:
+def serve_run(
+    backend: RegisterBackend,
+    body: Callable[[McsController], Awaitable[None]],
+    detector: DetectorConfig = WINDOW_DETECTOR,
+) -> None:
     """Connect a controller serving runs over `backend`, run `body`, then disconnect."""
-    controller = McsController(
-        run_specs(), backend, simulated=True, held=held(), detector=window_config().detector
-    )
+    controller = McsController(run_specs(), backend, simulated=True, held=held(), detector=detector)
     controller.post_initialise()
 
     async def main() -> None:
@@ -285,3 +296,23 @@ def test_disconnect_ends_a_run_in_progress() -> None:
     serve_run(backend, body)
 
     assert "stop_command" in written
+
+
+@pytest.mark.parametrize("model", [DETECTOR_PISPAD23, DETECTOR_PISPAD23_TS_UIMG])
+def test_a_start_with_a_detector_the_service_does_not_read_is_refused(model: str) -> None:
+    """Refuse a start, writing nothing, when the nifpga FIFO does not read the detector."""
+    backend = DictRegisters(run_specs(), quick_registers())
+    written: list[str] = []
+    backend.on_write(written.append)
+
+    async def body(controller: McsController) -> None:
+        await controller.run.save.put(False)
+
+        with pytest.raises(ValueError, match="runs with this detector"):
+            await controller.run.start()
+
+        assert controller.run.running.get() is False
+
+    serve_run(backend, body, replace(WINDOW_DETECTOR, model=model))
+
+    assert "start_command" not in written
