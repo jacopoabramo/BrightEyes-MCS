@@ -4,6 +4,7 @@ import multiprocessing as mp
 import queue
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -22,6 +23,16 @@ from brighteyes_mcs.acquisition.workers.detectors.spad.raw_writer import (
     SpadRawStreamWriterProcess,
 )
 from brighteyes_mcs.acquisition.manager import create_i64_counter
+
+
+class EndlessQueue:
+    """Queue stand-in that always holds another packet."""
+
+    def get(self, timeout: float) -> tuple[str, np.ndarray]:
+        return ("stream_out_main", np.array([1], np.uint64))
+
+    def qsize(self) -> int:
+        return 1
 
 
 class TestRawStreamLargeCounters(unittest.TestCase):
@@ -135,6 +146,39 @@ class TestRawStreamLargeCounters(unittest.TestCase):
             self.assertEqual(filename.read_bytes(), np.array([1, 2**63], np.uint64).tobytes())
         self.assertEqual(shared_dict["stream_out_main_bytes_written"], 16)
         self.assertEqual(shared_dict["raw_writer_error"], "")
+
+    def test_raw_writer_stops_draining_at_its_deadline_after_stop(self) -> None:
+        """Exit by itself once the drain deadline after a stop has passed, backlog or not."""
+        shared_dict = {
+            "expected_words_data_digital": 2**40,
+            "expected_words_data_analog": 0,
+            "expected_words_data_per_frame_digital": 2,
+            "expected_words_data_per_frame_analog": 0,
+            "shape": [1, 1, 1],
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            writer = SpadRawStreamWriterProcess(
+                EndlessQueue(),
+                ["stream_out_main"],
+                {"stream_out_main": str(Path(folder) / "main.raw")},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                acquisition_done=types.SimpleNamespace(clear=lambda: None, set=lambda: None),
+                acquisition_almost_done=types.SimpleNamespace(clear=lambda: None, set=lambda: None),
+                shared_dict=shared_dict,
+            )
+            writer.stop_drain_seconds = 0.2
+            writer.stop_event.set()
+            thread = threading.Thread(
+                target=inspect.unwrap(SpadRawStreamWriterProcess.run), args=(writer,), daemon=True
+            )
+
+            thread.start()
+            thread.join(5.0)
+
+            self.assertFalse(thread.is_alive())
+        self.assertEqual(shared_dict["raw_writer_stop_reason"], "stop_requested")
 
 
 class TestRustFifoReaderConfiguration(unittest.TestCase):

@@ -13,6 +13,10 @@ from brighteyes_mcs.logging_setup import logger, set_debug
 
 
 class RawStreamWriterProcess(mp.Process):
+    # The supervisor terminates a writer 5 s after stop, and a reader terminated inside
+    # get() leaves the queue's lock taken for every later run of the session.
+    stop_drain_seconds = 4.0
+
     def __init__(
         self,
         queue_in,
@@ -102,6 +106,7 @@ class RawStreamWriterProcess(mp.Process):
         if self.shared_dict.get("software_trigger_enabled", False):
             self.shared_dict["software_trigger_worker_ready"] = True
         idle_after_stop = 0
+        stop_deadline = None
         try:
             while True:
                 try:
@@ -149,6 +154,16 @@ class RawStreamWriterProcess(mp.Process):
                     if self.stop_event.is_set():
                         self.shared_dict["raw_writer_stop_reason"] = "stop_requested"
                     break
+                if self.stop_event.is_set():
+                    if stop_deadline is None:
+                        stop_deadline = time.monotonic() + self.stop_drain_seconds
+                    elif time.monotonic() > stop_deadline:
+                        logger.warning(
+                            "SPAD raw writer left %s queued packets at its stop deadline",
+                            queue_depth,
+                        )
+                        self.shared_dict["raw_writer_stop_reason"] = "stop_requested"
+                        break
 
             for handle in handles.values():
                 handle.flush()
