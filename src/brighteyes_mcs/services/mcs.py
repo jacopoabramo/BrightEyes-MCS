@@ -482,12 +482,20 @@ def detector_config(options: argparse.Namespace) -> DetectorConfig:
     )
 
 
-def stop_board(manager: McsManager | None, deadline: float) -> bool:
+def stop_board(
+    manager: McsManager | None, deadline: float, finishing: threading.Lock | None = None
+) -> bool:
     """Stop the board and the manager's processes, waiting at most `deadline` seconds.
 
     The stop runs on a daemon thread, so a stop that hangs cannot keep the
     process alive. Past the deadline every thread's stack is written to the
     output and an error is logged.
+
+    Parameters
+    ----------
+    finishing
+        A lock held while a run finishes. The stop waits for it, within the
+        deadline, so it never shuts down the processes a finishing run uses.
 
     Returns
     -------
@@ -499,10 +507,11 @@ def stop_board(manager: McsManager | None, deadline: float) -> bool:
 
     def stop() -> None:
         try:
-            try:
-                manager.stop_fpga()
-            finally:
-                manager.mp_manager.shutdown()
+            with finishing or contextlib.nullcontext():
+                try:
+                    manager.stop_fpga()
+                finally:
+                    manager.mp_manager.shutdown()
         except Exception:
             logger.exception("Stopping the board failed")
 
@@ -545,6 +554,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Registers without a description: %s", ", ".join(undescribed))
 
     manager = None
+    finishing = None
     backend: RegisterBackend
     if options.simulate:
         backend = DictRegisters(specs, DEFAULT_REGISTERS)
@@ -558,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
             stop_board(manager, STOP_DEADLINE)
             return 1
         backend = ManagerRegisters(manager)
+        finishing = backend.finishing
 
     controller = McsController(
         specs,
@@ -574,7 +585,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.exception("Serving the registers failed")
         return 1
     finally:
-        stop_board(manager, STOP_DEADLINE)
+        stop_board(manager, STOP_DEADLINE, finishing)
     return 0
 
 

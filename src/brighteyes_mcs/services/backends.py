@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -165,12 +166,14 @@ class ManagerRegisters:
     This is the only place the service calls the synchronous manager: each
     call runs on a thread pool the backend owns, so the event loop never waits
     on the board, and a call stuck on the board does not keep the loop from
-    closing, as one on the loop's default pool would.
+    closing, as one on the loop's default pool would. `finishing` is held
+    while a run finishes, so a stop of the board can wait for that to end.
     """
 
     def __init__(self, manager: McsManager) -> None:
         self.manager = manager
         self.executor = ThreadPoolExecutor(thread_name_prefix="mcs-board")
+        self.finishing = threading.Lock()
 
     async def read(self, names: Sequence[str]) -> dict[str, Any] | None:
         loop = asyncio.get_running_loop()
@@ -248,18 +251,19 @@ class ManagerRegisters:
             The first error a step raised, once every step has been tried.
         """
         error: Exception | None = None
-        for step in (
-            self.manager.quick_reset_fpga,
-            self.manager.stop_preview,
-            self.manager.stop_acquisition,
-        ):
-            try:
-                step()
-            except Exception as failure:
-                error = error or failure
-        if error is not None:
-            raise error
-        return str(self.manager.shared_dict.get("filenameh5", ""))
+        with self.finishing:
+            for step in (
+                self.manager.quick_reset_fpga,
+                self.manager.stop_preview,
+                self.manager.stop_acquisition,
+            ):
+                try:
+                    step()
+                except Exception as failure:
+                    error = error or failure
+            if error is not None:
+                raise error
+            return str(self.manager.shared_dict.get("filenameh5", ""))
 
     def on_write(self, listener: Callable[[str], None]) -> None:
         """Call `listener` after each write the manager's FPGA handle makes.

@@ -14,6 +14,7 @@ import pytest
 from p4p.client.thread import Context, RemoteError
 
 from brighteyes_mcs.acquisition.manager import McsManager
+from brighteyes_mcs.services.backends import ManagerRegisters
 from brighteyes_mcs.services.mcs import STOP_DEADLINE, stop_board
 from test.fake_bitfile import SERVICE_REGISTERS, SETTINGS_REGISTERS, write_fake_bitfile
 
@@ -189,6 +190,34 @@ def test_stop_board_gives_up_at_its_deadline(
     monkeypatch.setattr(stopping, "stop_fpga", lambda: None)
     assert stop_board(stopping, 0.2) is True
     stopping.mp_manager.shutdown.assert_called_once_with()
+
+
+def test_stop_board_waits_for_a_run_still_finishing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stop the board only once a run's finish, still running at the stop, has returned."""
+    order: list[str] = []
+    finishing = threading.Event()
+    release = threading.Event()
+    board = manager()
+
+    def stop_preview() -> None:
+        finishing.set()
+        release.wait()
+        order.append("finish")
+
+    monkeypatch.setattr(board, "quick_reset_fpga", lambda: None)
+    monkeypatch.setattr(board, "stop_preview", stop_preview)
+    monkeypatch.setattr(board, "stop_acquisition", lambda: None)
+    monkeypatch.setattr(board, "stop_fpga", lambda: order.append("stop"))
+    backend = ManagerRegisters(board)
+    finish = threading.Thread(target=backend.finish_now)
+    finish.start()
+    assert finishing.wait(timeout=1)
+    threading.Timer(0.2, release.set).start()
+
+    assert stop_board(board, 2, backend.finishing) is True
+    finish.join()
+
+    assert order == ["finish", "stop"]
 
 
 def test_stop_board_has_nothing_to_stop_in_simulation() -> None:
