@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 import nifpga
+import numpy as np
 from fastcs.attributes import AttributeIO, AttributeIORef, AttrR, AttrRW, AttrW
 from fastcs.control_system import FastCS
 from fastcs.controllers import Controller
@@ -64,17 +65,23 @@ class RegisterRef(AttributeIORef):
 
 
 class RegisterIO(AttributeIO[Any, RegisterRef]):
-    """Writes an attribute's register through the backend, holding `lock` while it does."""
+    """Writes an attribute's register through the backend, holding `lock` until it is shown.
+
+    `show_written` reads a written register back, so that a put waiting for
+    the lock computes from the value the board now holds.
+    """
 
     def __init__(
         self,
         backend: RegisterBackend,
         read_back: Callable[[str], Awaitable[None]],
+        show_written: Callable[[Mapping[str, Any]], Awaitable[None]],
         lock: asyncio.Lock,
     ) -> None:
         super().__init__()
         self.backend = backend
         self.read_back = read_back
+        self.show_written = show_written
         self.lock = lock
 
     async def update(self, attr: AttrR[Any, RegisterRef]) -> None:
@@ -91,6 +98,7 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
             except Exception:
                 await self.read_back(attr.io_ref.name)
                 raise
+            await self.show_written({attr.io_ref.name: value})
 
 
 class McsController(Controller):
@@ -126,7 +134,9 @@ class McsController(Controller):
         # its registers from the values the one before it left.
         self.lock = asyncio.Lock()
         self.simulated = AttrR(Bool(), initial_value=simulated)
-        self.registers = Controller(ios=[RegisterIO(backend, self.read_back, self.lock)])
+        self.registers = Controller(
+            ios=[RegisterIO(backend, self.read_back, self.show_written, self.lock)]
+        )
         for spec in specs:
             kind = AttrRW if spec.writable else AttrR
             attribute = kind(
@@ -223,6 +233,8 @@ class McsController(Controller):
             values = {}
             for name in writes(path, settings):
                 register_type = self.registers.attributes[name].datatype
+                if not np.all(np.isfinite(np.asarray(computed[name], float))):
+                    raise ValueError(f"The value {computed[name]!r} of {name} is not finite")
                 checked = register_type.validate(computed[name])
                 # The board takes only integers for a register served as a double.
                 values[name] = int(checked) if isinstance(register_type, WholeFloat) else checked
@@ -254,8 +266,13 @@ class McsController(Controller):
         """
         raw = {name: attribute.get() for name, attribute in self.registers.attributes.items()}
         derived, failures = derive(raw, self.held, self.served)
-        self.settings.update(derived)
+        # An auxiliary position is held, but an output sending the axis holds
+        # it too, and the board is the one to show.
+        self.held.update(
+            (path, value) for path, value in derived.items() if SETTINGS[path].held
+        )
         self.settings.update(self.held)
+        self.settings.update(derived)
         for path in self.served:
             if path in failures:
                 continue
