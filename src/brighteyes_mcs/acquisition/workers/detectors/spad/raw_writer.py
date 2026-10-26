@@ -105,10 +105,11 @@ class RawStreamWriterProcess(mp.Process):
         try:
             while True:
                 try:
-                    dict_from_queue = self.queue_in.get(timeout=0.1)
+                    # TODO: receive from the sharedbox FIFO stream.
+                    item = self.queue_in.get(timeout=0.1)
                     idle_after_stop = 0
                 except queue.Empty:
-                    dict_from_queue = None
+                    item = None
                     if self.stop_event.is_set():
                         idle_after_stop += 1
                     else:
@@ -125,17 +126,13 @@ class RawStreamWriterProcess(mp.Process):
                             idle_after_stop += 1
                             self.shared_dict["raw_writer_stop_reason"] = "expected_words_reached"
 
-                if dict_from_queue is not None:
-                    for fifo_name, payload in dict_from_queue.items():
-                        if fifo_name not in handles:
-                            continue
-                        data, packet_words = payload
-                        array = np.asarray(data)
-                        if packet_words <= 0 or array.size == 0:
-                            continue
+                if item is not None:
+                    fifo_name, words = item
+                    array = np.asarray(words)
+                    if fifo_name in handles and array.size > 0:
                         self.received_any_packet[fifo_name] = True
                         handles[fifo_name].write(array.tobytes(order="C"))
-                        self._update_progress(fifo_name, packet_words, array.nbytes)
+                        self._update_progress(fifo_name, array.size, array.nbytes)
 
                 try:
                     queue_depth = self.queue_in.qsize()

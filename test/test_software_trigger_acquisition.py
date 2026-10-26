@@ -1,6 +1,7 @@
 """Exercise real acquisition workers and storage across separately triggered frames."""
 
 import multiprocessing as mp
+from pathlib import Path
 import time
 from unittest.mock import MagicMock, patch
 
@@ -27,7 +28,10 @@ def wait_until(predicate, manager, timeout=15):
 
 @pytest.mark.parametrize("preview,raw,channels", [(False, False, 25), (False, False, 49),
                                                 (True, False, 25), (False, True, 25)])
-def test_separate_triggers_share_workers_and_one_output(tmp_path, preview, raw, channels):
+def test_separate_triggers_share_workers_and_one_output(
+    tmp_path: Path, preview: bool, raw: bool, channels: int
+) -> None:
+    """Run separately triggered frames through shared workers into one output."""
     manager = McsManager()
     incoming = mp.Queue()
     manager.fpga_handle = MagicMock()
@@ -72,7 +76,7 @@ def test_separate_triggers_share_workers_and_one_output(tmp_path, preview, raw, 
                 packet = np.full(size, frame + 1 if raw else 0, dtype=np.uint64)
                 packets[fifo].append(packet)
                 if raw:
-                    incoming.put({fifo: [packet, size]})
+                    incoming.put((fifo, packet))
                 else:
                     # FIFO chunks contain whole samples; split the last sample
                     # into a separate packet so completion cannot assume one chunk.

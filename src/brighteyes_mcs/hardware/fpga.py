@@ -63,7 +63,8 @@ class FpgaHandle(object):
             "stop_event": self.mp_manager.Event(),
             "stop_done_event": self.mp_manager.Event(),
             "print_event": self.mp_manager.Event(),
-            "queueFifoRead": self.mp_manager.Queue(),
+            # TODO: replace with a lossless sharedbox stream of FIFO word blocks.
+            "queueFifoRead": mp.Queue(),
             "is_connected": self.mp_manager.Event(),
             "is_readytorun": self.mp_manager.Event(),
             "initialization_error": self.mp_manager.dict(),

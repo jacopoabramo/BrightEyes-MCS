@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import multiprocessing as mp
 import queue
 import sys
@@ -100,6 +101,40 @@ class TestRawStreamLargeCounters(unittest.TestCase):
         )
 
         self.assertEqual(writer._expected_bytes("stream_out_main"), (2**32 + 1) * 8)
+
+    def test_raw_writer_writes_tuple_items_byte_for_byte(self) -> None:
+        """Write the words of each tuple item and skip empty or unknown-FIFO items."""
+        incoming: queue.Queue[tuple[str, np.ndarray]] = queue.Queue()
+        incoming.put(("stream_out_main", np.array([1, 2**63], np.uint64)))
+        incoming.put(("stream_out_main", np.array([], np.uint64)))
+        incoming.put(("stream_out_aux", np.array([9], np.uint64)))
+        shared_dict = {
+            "expected_words_data_digital": 2,
+            "expected_words_data_analog": 0,
+            "expected_words_data_per_frame_digital": 2,
+            "expected_words_data_per_frame_analog": 0,
+            "shape": [1, 1, 1],
+        }
+        with tempfile.TemporaryDirectory() as folder:
+            filename = Path(folder) / "main.raw"
+            writer = SpadRawStreamWriterProcess(
+                incoming,
+                ["stream_out_main"],
+                {"stream_out_main": str(filename)},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                {"stream_out_main": create_i64_counter(), "stream_out_aux": create_i64_counter()},
+                acquisition_done=types.SimpleNamespace(clear=lambda: None, set=lambda: None),
+                acquisition_almost_done=types.SimpleNamespace(clear=lambda: None, set=lambda: None),
+                shared_dict=shared_dict,
+            )
+            writer.stop_event.set()
+
+            inspect.unwrap(SpadRawStreamWriterProcess.run)(writer)
+
+            self.assertEqual(filename.read_bytes(), np.array([1, 2**63], np.uint64).tobytes())
+        self.assertEqual(shared_dict["stream_out_main_bytes_written"], 16)
+        self.assertEqual(shared_dict["raw_writer_error"], "")
 
 
 class TestRustFifoReaderConfiguration(unittest.TestCase):

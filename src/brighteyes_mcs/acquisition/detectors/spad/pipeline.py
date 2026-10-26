@@ -25,7 +25,6 @@ class SpadDetectorPipeline:
             acquisition.last_preprocessed_len,
             acquisition.data_queue,
             acquisition.dtype_data_queue,
-            len_buffer=acquisition.fifo_prebuffer_length,
             debug=acquisition.debug,
             use_rust_fifo=acquisition.use_rust_fifo,
         )

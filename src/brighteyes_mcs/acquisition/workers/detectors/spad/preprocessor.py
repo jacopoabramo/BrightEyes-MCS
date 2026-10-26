@@ -1,7 +1,8 @@
-"""FIFO preprocessing worker that batches raw queue payloads into numpy arrays."""
+"""FIFO preprocessing worker that forwards raw queue payloads as typed numpy arrays."""
 
 from brighteyes_mcs.logging_setup import logged_worker
 import multiprocessing as mp
+import queue
 import numpy as np
 from brighteyes_mcs.logging_setup import logger, set_debug
 
@@ -19,14 +20,13 @@ class DataPreProcess(mp.Process):
         last_preprocessed_len,
         dict_of_queue_array_out,
         dict_of_dtype_queue_array_out,
-        len_buffer=0,
         debug=False,
         use_rust_fifo=True,
     ):
         super().__init__()
         self.daemon = True
         """
-        :param queue_in: this is the queue from the fpgahandleprocess each elements contains ["FIFONAME", data]
+        :param queue_in: this is the queue from the fpgahandleprocess each elements contains ("FIFONAME", data)
         :param dict_of_shared_loc: {'FIFONAME':shared_loc_fifo,...}
         :param dict_of_queue_array_out: {'FIFONAME':shared_queue_array_out,...}
         :param dict_of_dtype_queue_array_out: {'FIFONAME':dtype_shared_queue_array_out,...}
@@ -50,79 +50,25 @@ class DataPreProcess(mp.Process):
         self.dict_of_queue_array_out = dict_of_queue_array_out
         self.dict_of_dtype_queue_array_out = dict_of_dtype_queue_array_out
 
-        self.len_buffer = len_buffer
-        self.timeout = 0  # 0.1
-
     @logged_worker
-    def run(self):
+    def run(self) -> None:
         logger.debug("%s %s", "DataPreProcess RUN - PID:", os.getpid())
-
-        len_buffer = self.len_buffer
-        timeout = self.timeout
-
-        pre_buffer_list = {}
-        pre_buffer_len = {}
-
-        delta_time = {}
-        time_stop = {}
-        time_start = {}
-
-        counter_total_len = {}
-
-        # fifo_lists = []
         while not self.stop_event.is_set():
-            # databuffer = self.shm_data.get_numpy_handle()
-            if not self.queue_in.empty():
-                dict_from_queue = self.queue_in.get()
-                # debug(dict_from_queue.keys())
-                # fifo_name = list(dict_from_queue.keys())[0]
-                for fifo_name in dict_from_queue.keys():
-                    data, len_values = dict_from_queue[fifo_name]
-                    if not (fifo_name in pre_buffer_list):
-                        pre_buffer_list[fifo_name] = []
-                        pre_buffer_len[fifo_name] = 0
-                        counter_total_len[fifo_name] = 0
-                        time_start[fifo_name] = time.time()
-                        # fifo_lists.append(fifo_name)
-                    # Rust FIFO packets currently arrive as numpy arrays, but the
-                    # local pre-buffer is still a Python list, so this conversion is
-                    # one of the hottest overhead sources at high sample rates.
-                    pre_buffer_list[fifo_name] += data.tolist()
-                    pre_buffer_len[fifo_name] += len_values
-                    counter_total_len[fifo_name] += len_values
+            try:
+                # TODO: receive from the sharedbox FIFO stream.
+                fifo_name, words = self.queue_in.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            data_as_array = np.asarray(words, dtype=np.uint64).astype(
+                self.dict_of_dtype_queue_array_out[fifo_name]
+            )
+            self.dict_of_queue_array_out[fifo_name].put(data_as_array)
+            self.dict_of_shared_loc[fifo_name].value += len(data_as_array)
+            self.last_preprocessed_len[fifo_name].value = len(data_as_array)
 
-            # debug("fifo_lists", fifo_lists)
-            # debug("pre_buffer_list", pre_buffer_list.keys())
-            for fifo_name in pre_buffer_list.keys():
-                time_stop[fifo_name] = time.time()
-                delta_time[fifo_name] = time_stop[fifo_name] - time_start[fifo_name]
-                # print(delta_time[fifo_name])
-                if (pre_buffer_len[fifo_name] > len_buffer or delta_time[fifo_name] > timeout) and (
-                    pre_buffer_len[fifo_name] > 0
-                ):
-                    time_start[fifo_name] = time.time()
-                    # Convert the accumulated Python list back to a contiguous array
-                    # only when the downstream worker is ready to consume it.
-                    data_as_array = np.fromiter(
-                        pre_buffer_list[fifo_name],
-                        dtype=np.uint64,
-                        count=pre_buffer_len[fifo_name],
-                    ).astype(self.dict_of_dtype_queue_array_out[fifo_name])
-
-                    self.dict_of_queue_array_out[fifo_name].put(data_as_array)
-                    self.dict_of_shared_loc[fifo_name].value = (
-                        self.dict_of_shared_loc[fifo_name].value + pre_buffer_len[fifo_name]
-                    )
-                    self.last_preprocessed_len[fifo_name].value = pre_buffer_len[fifo_name]
-                    # print("-> ", self.dict_of_shared_loc[fifo_name].value)
-                    pre_buffer_list[fifo_name] = []
-                    pre_buffer_len[fifo_name] = 0
-
-        logger.debug("%s %s", "counter_total_len ", counter_total_len)
         self.stop_event.clear()
         self.stop_event_done.set()
         logger.debug("%s %s", "DataPreProcess self.stop_event.clear() PID: ", os.getpid())
-        return
 
     def stop(self):
         # databuffer = self.shm_data.get_numpy_handle()
