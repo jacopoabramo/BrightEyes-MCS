@@ -99,7 +99,7 @@ class FpgaHandleProcess(mp.Process):
 
         # self.rust_subprocess = None
 
-    def loop_run_check(self):
+    def loop_run_check(self) -> None:
         if self._uses_rust_fifo_reader():
             from ..fifo import RustFastFifoReader
 
@@ -123,13 +123,14 @@ class FpgaHandleProcess(mp.Process):
 
                 self.stop_event.set()
 
-        while not self.stop_event.is_set():
-            if self.fpgarunning.is_set() and not self.fpgarunning_internal:
+        while not self.fpgarunning_internal and not self.stop_event.is_set():
+            if self.fpgarunning.wait(0.1):
                 self.nifpga_session.run()
                 self.fpgarunning_internal = True
                 self.fpga_started.set()
                 logger.debug("%s %s", self.process_label, "nifpga_session.run()")
                 self.fpgarunning.clear()
+        self.stop_event.wait()
         logger.debug("self.stop_event.is_set()")
 
         if self._uses_rust_fifo_reader():
@@ -138,6 +139,7 @@ class FpgaHandleProcess(mp.Process):
 
     def loop_fifo_read_continuously(self) -> None:
         while not self.stop_event.is_set():
+            sent = False
             temp_list = list(self.list_fifos_to_read_continously)
             if self.fpgarunning_internal and len(temp_list) != 0:
                 for current_fifo in temp_list:
@@ -167,9 +169,12 @@ class FpgaHandleProcess(mp.Process):
                             words = np.asarray(read_data.data, dtype=np.uint64)
                             # TODO: send to the sharedbox FIFO stream.
                             self.queue_fifo_read.put((current_fifo, words))
+                            sent = True
 
                     except nifpga.FifoTimeoutError:
                         pass
+            if not sent:
+                sleep(0.001)
 
     def loop_fifo_read_continuously_rust_fifo(self, current_fifo: str) -> None:
         self.rust_reader_ready.wait()
@@ -182,6 +187,8 @@ class FpgaHandleProcess(mp.Process):
                 if len(read_data) > 0:
                     # TODO: send to the sharedbox FIFO stream.
                     self.queue_fifo_read.put_nowait((current_fifo, read_data))
+            else:
+                sleep((self.timeout_fifos - delta_time) / 1e9)
         logger.debug("self.stop_event.is_set()")
 
     def _uses_nifpga_fifo(self):
