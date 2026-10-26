@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -25,7 +25,8 @@ def registers():
 
 
 def manager_stub():
-    manager = McsManager.__new__(McsManager)
+    with patch("brighteyes_mcs.acquisition.manager.mp.Manager"):
+        manager = McsManager()
     manager.registers_configuration = registers()
     manager.is_connected = True
     manager.detector_model = "SPAD Array"
@@ -39,6 +40,8 @@ def manager_stub():
     manager.quick_reset_fpga = MagicMock()
     manager.check_fpga_alive = MagicMock(return_value=0)
     manager.loc_acquired = {fifo: SimpleNamespace(value=0) for fifo in manager.activated_fifos_list}
+    manager.process_supervisor = MagicMock()
+    manager.process_supervisor.get.return_value = None
     return manager
 
 

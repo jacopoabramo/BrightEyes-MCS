@@ -2,9 +2,11 @@
 
 import numpy as np
 import multiprocessing as mp
+import contextlib
 import re
+import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from typing import Any
 
 # from PySide6.QtCore import QObject
@@ -199,6 +201,7 @@ class McsManager:
         self.dim_z = 0
         self.dim_rep = 0
         self.software_trigger_session = None
+        self.fpga_lock = threading.RLock()
         # self.acquisition_thread = Thread()
         self.preview_process = None  # mp.Process()
         self.data_process = None
@@ -913,48 +916,50 @@ class McsManager:
         """
         Set the registers dictionary
         """
-        myconf = dict(myconf)
-        if not detector_uses_nifpga_fifo(self.detector_model):
-            for register in ("stream_out_aux_enable", "stream_out_main_enable", "dfd_enable"):
-                if register in myconf:
-                    myconf[register] = False
-        nifpga_conf = _pispad23_nifpga_dimension_registers(myconf, self.detector_model)
-        # debug("setRegistersDict")
-        register_set = "setRegistersDict: "
-        temp_dict = {}
-        for i in myconf:
-            if myconf[i] is not None:
-                # debug(i, myconf[i])
-                register_set += "%s %s " % (i, myconf[i])
-                # self.nifpga_session.registers[i].write(myconf[i])
-                if self.is_connected:
-                    self.fpga_handle.register_write_checked(i, nifpga_conf[i])
-                temp_dict[i] = myconf[i]
-            else:
-                logger.debug("myconf is None")
-        logger.debug(register_set)
-        self.registers_configuration.update(temp_dict)
+        with self.fpga_access():
+            myconf = dict(myconf)
+            if not detector_uses_nifpga_fifo(self.detector_model):
+                for register in ("stream_out_aux_enable", "stream_out_main_enable", "dfd_enable"):
+                    if register in myconf:
+                        myconf[register] = False
+            nifpga_conf = _pispad23_nifpga_dimension_registers(myconf, self.detector_model)
+            # debug("setRegistersDict")
+            register_set = "setRegistersDict: "
+            temp_dict = {}
+            for i in myconf:
+                if myconf[i] is not None:
+                    # debug(i, myconf[i])
+                    register_set += "%s %s " % (i, myconf[i])
+                    # self.nifpga_session.registers[i].write(myconf[i])
+                    if self.is_connected:
+                        self.fpga_handle.register_write_checked(i, nifpga_conf[i])
+                    temp_dict[i] = myconf[i]
+                else:
+                    logger.debug("myconf is None")
+            logger.debug(register_set)
+            self.registers_configuration.update(temp_dict)
 
-    def read_registers_dict(self):
+    def read_registers_dict(self) -> None:
         """
         Read the registers dictionary
         """
         logger.debug("readRegistersDict()")
-        if self.is_connected:
-            self.registers_configuration.update(
-                _pispad23_nifpga_dimension_registers(
-                    self.fpga_handle.register_read_all(),
-                    self.detector_model,
-                    direction=-1,
+        with self.fpga_access():
+            if self.is_connected:
+                self.registers_configuration.update(
+                    _pispad23_nifpga_dimension_registers(
+                        self.fpga_handle.register_read_all(),
+                        self.detector_model,
+                        direction=-1,
+                    )
                 )
-            )
-            logger.debug(
-                "%s %s",
-                "readRegistersDict self.registers_configuration:",
-                self.registers_configuration,
-            )
-        else:
-            logger.debug("register_read_all() not called due to FPGAhandle not connected")
+                logger.debug(
+                    "%s %s",
+                    "readRegistersDict self.registers_configuration:",
+                    self.registers_configuration,
+                )
+            else:
+                logger.debug("register_read_all() not called due to FPGAhandle not connected")
 
         self.timebins_per_pixel = self.registers_configuration["max_time_bins_per_pixel"]
         self.circ_repetition = self.registers_configuration["max_circular_repetition"]
@@ -1156,48 +1161,65 @@ class McsManager:
         finally:
             self.is_connected = False
 
-    def wait_for_fpga_idle(self, timeout=5.0, poll_interval=0.01):
+    def wait_for_fpga_idle(self, timeout: float = 5.0, poll_interval: float = 0.01) -> None:
         """Wait until the scan state machine reports its idle state."""
-        if not self.is_connected or self.fpga_handle is None:
-            raise RuntimeError("The FPGA is not connected.")
+        with self.fpga_access():
+            if not self.is_connected or self.fpga_handle is None:
+                raise RuntimeError("The FPGA is not connected.")
 
-        deadline = time.monotonic() + float(timeout)
-        last_status = None
-        while time.monotonic() < deadline:
-            registers = self.fpga_handle.register_read(("debug_scan_fsm_status",))
-            last_status = registers.get("debug_scan_fsm_status")
-            self.registers_configuration["debug_scan_fsm_status"] = last_status
-            if last_status == 0:
-                return
-            time.sleep(float(poll_interval))
+            deadline = time.monotonic() + float(timeout)
+            last_status = None
+            while time.monotonic() < deadline:
+                registers = self.fpga_handle.register_read(("debug_scan_fsm_status",))
+                last_status = registers.get("debug_scan_fsm_status")
+                self.registers_configuration["debug_scan_fsm_status"] = last_status
+                if last_status == 0:
+                    return
+                time.sleep(float(poll_interval))
 
-        raise TimeoutError(
-            "FPGA FSM did not reach idle state 0 within "
-            f"{float(timeout):g} seconds (last status: {last_status!r})."
-        )
+            raise TimeoutError(
+                "FPGA FSM did not reach idle state 0 within "
+                f"{float(timeout):g} seconds (last status: {last_status!r})."
+            )
 
-    def check_fpga_alive(self):
+    def check_fpga_alive(self) -> int:
         """Read a lightweight status register to verify FPGA responsiveness."""
-        if not self.is_connected or self.fpga_handle is None:
-            raise RuntimeError("The FPGA is not connected.")
+        with self.fpga_access():
+            if not self.is_connected or self.fpga_handle is None:
+                raise RuntimeError("The FPGA is not connected.")
 
-        registers = self.fpga_handle.register_read(("debug_scan_fsm_status",))
-        if "debug_scan_fsm_status" not in registers:
-            raise RuntimeError("The FPGA watchdog register did not return a value.")
-        status = registers["debug_scan_fsm_status"]
-        self.registers_configuration["debug_scan_fsm_status"] = status
-        return status
+            registers = self.fpga_handle.register_read(("debug_scan_fsm_status",))
+            if "debug_scan_fsm_status" not in registers:
+                raise RuntimeError("The FPGA watchdog register did not return a value.")
+            status = registers["debug_scan_fsm_status"]
+            self.registers_configuration["debug_scan_fsm_status"] = status
+            return status
 
-    def quick_reset_fpga(self, timeout=5.0, poll_interval=0.01):
+    @contextlib.contextmanager
+    def fpga_access(self, *, wait: bool = True) -> Generator[bool, None, None]:
+        """Hold the FPGA lock for the block, so register access from other threads waits.
+
+        Yields whether the lock was taken: always `True` when `wait` is on, and
+        `False` without waiting when `wait` is off and another thread holds it.
+        """
+        acquired = self.fpga_lock.acquire(blocking=wait)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                self.fpga_lock.release()
+
+    def quick_reset_fpga(self, timeout: float = 5.0, poll_interval: float = 0.01) -> None:
         """Pulse the stop register and verify that the scan FSM becomes idle."""
-        if not self.is_connected or self.fpga_handle is None:
-            raise RuntimeError("The FPGA is not connected.")
+        with self.fpga_access():
+            if not self.is_connected or self.fpga_handle is None:
+                raise RuntimeError("The FPGA is not connected.")
 
-        self.fpga_handle.register_write_checked("stop_command", True)
-        self.registers_configuration["stop_command"] = True
-        self.fpga_handle.register_write_checked("stop_command", False)
-        self.registers_configuration["stop_command"] = False
-        self.wait_for_fpga_idle(timeout=timeout, poll_interval=poll_interval)
+            self.fpga_handle.register_write_checked("stop_command", True)
+            self.registers_configuration["stop_command"] = True
+            self.fpga_handle.register_write_checked("stop_command", False)
+            self.registers_configuration["stop_command"] = False
+            self.wait_for_fpga_idle(timeout=timeout, poll_interval=poll_interval)
 
     def _stop_detector_receiver(self):
         if self.detector_receiver_process is None:

@@ -7,7 +7,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call, patch
 
 import h5py
 import pytest
@@ -471,7 +471,8 @@ def test_conflicting_config_is_rejected_before_connecting(ui):
 
 
 def test_disconnected_register_settings_are_retained_and_write_errors_propagate():
-    manager = McsManager.__new__(McsManager)
+    with patch("brighteyes_mcs.acquisition.manager.mp.Manager"):
+        manager = McsManager()
     manager.detector_model = "SPAD Array"
     manager.is_connected = False
     manager.registers_configuration = {}
@@ -486,9 +487,8 @@ def test_disconnected_register_settings_are_retained_and_write_errors_propagate(
 
 
 def test_requested_controls_are_written_after_vi_start():
-    from unittest.mock import call, patch
-
-    manager = McsManager.__new__(McsManager)
+    with patch("brighteyes_mcs.acquisition.manager.mp.Manager"):
+        manager = McsManager()
     for name in ("bitfile", "ni_address", "bitfile2", "ni_address2"):
         setattr(manager, name, "")
     manager.detector_model = "SPAD Array"

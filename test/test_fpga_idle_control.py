@@ -1,3 +1,6 @@
+import contextlib
+import threading
+from collections.abc import Generator
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
@@ -11,11 +14,56 @@ from brighteyes_mcs.ui.qt.main_window import MainWindow
 
 
 def bare_manager():
-    manager = McsManager.__new__(McsManager)
+    with patch("brighteyes_mcs.acquisition.manager.mp.Manager"):
+        manager = McsManager()
     manager.is_connected = True
     manager.fpga_handle = MagicMock()
     manager.registers_configuration = {}
     return manager
+
+
+@contextlib.contextmanager
+def lock_held_elsewhere(manager: McsManager) -> Generator[None, None, None]:
+    """Hold the manager's FPGA lock from another thread for the block."""
+    held, release = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with manager.fpga_access():
+            held.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=hold)
+    thread.start()
+    held.wait(5)
+    try:
+        yield
+    finally:
+        release.set()
+        thread.join(5)
+
+
+def test_fpga_access_reports_a_busy_lock_without_waiting() -> None:
+    """Yield False while another thread holds the lock and True once it is free."""
+    manager = bare_manager()
+    with lock_held_elsewhere(manager):
+        with manager.fpga_access(wait=False) as free:
+            assert free is False
+    with manager.fpga_access(wait=False) as free:
+        assert free is True
+
+
+def test_quick_reset_waits_for_the_fpga_lock() -> None:
+    """Hold the reset back until the thread holding the lock releases it."""
+    manager = bare_manager()
+    manager.wait_for_fpga_idle = MagicMock()
+    with lock_held_elsewhere(manager):
+        reset = threading.Thread(target=manager.quick_reset_fpga)
+        reset.start()
+        reset.join(0.2)
+        assert reset.is_alive()
+        manager.fpga_handle.register_write_checked.assert_not_called()
+    reset.join(5)
+    assert manager.fpga_handle.register_write_checked.call_count == 2
 
 
 def test_quick_reset_pulses_stop_and_waits_for_idle():
