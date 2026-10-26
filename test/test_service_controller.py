@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import threading
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 import nifpga
@@ -33,7 +33,7 @@ class StubBackend:
         self.busy_reads = busy_reads
         self.write_error = write_error
         self.reads = 0
-        self.written: list[tuple[str, Any]] = []
+        self.written: list[dict[str, Any]] = []
         self.listeners: list[Callable[[str], None]] = []
 
     async def read(self, names: Sequence[str]) -> dict[str, Any] | None:
@@ -44,10 +44,10 @@ class StubBackend:
             return None
         return {name: value for name, value in self.values.items() if name in names}
 
-    async def write(self, name: str, value: Any) -> None:
+    async def write_many(self, values: Mapping[str, Any]) -> None:
         if self.write_error is not None:
             raise self.write_error
-        self.written.append((name, value))
+        self.written.append(dict(values))
 
     def on_write(self, listener: Callable[[str], None]) -> None:
         self.listeners.append(listener)
@@ -104,7 +104,7 @@ def test_a_write_from_elsewhere_reaches_its_attribute() -> None:
     backend = DictRegisters(fake_specs(), {})
 
     async def body(controller: McsController) -> None:
-        writer = threading.Thread(target=lambda: asyncio.run(backend.write("max_pixel", 4)))
+        writer = threading.Thread(target=lambda: asyncio.run(backend.write_many({"max_pixel": 4})))
         writer.start()
         writer.join()
         await controller.registers.attributes["max_pixel"].wait_for_value(4, timeout=0.5)
@@ -178,7 +178,7 @@ def test_a_write_after_disconnect_is_ignored() -> None:
 
     serve_controller(backend, body)
 
-    asyncio.run(backend.write("stop_command", True))
+    asyncio.run(backend.write_many({"stop_command": True}))
 
 
 def test_a_whole_number_reaches_the_backend_as_an_integer() -> None:
@@ -190,8 +190,8 @@ def test_a_whole_number_reaches_the_backend_as_an_integer() -> None:
 
     serve_controller(backend, body)
 
-    assert backend.written == [("dfd_dwell_time_cycles_120mhz", 5)]
-    assert type(backend.written[0][1]) is int
+    assert backend.written == [{"dfd_dwell_time_cycles_120mhz": 5}]
+    assert type(backend.written[0]["dfd_dwell_time_cycles_120mhz"]) is int
 
 
 def test_a_read_back_the_busy_board_skipped_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
