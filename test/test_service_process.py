@@ -15,7 +15,7 @@ from p4p.client.thread import Context, RemoteError
 
 from brighteyes_mcs.acquisition.manager import McsManager
 from brighteyes_mcs.services.mcs import STOP_DEADLINE, stop_board
-from test.fake_bitfile import write_fake_bitfile
+from test.fake_bitfile import SETTINGS_REGISTERS, write_fake_bitfile
 
 READY = "mcs ready"
 
@@ -97,6 +97,40 @@ def test_the_service_serves_registers_and_stops_cleanly(tmp_path: Path) -> None:
         process.stdin.close()
 
     assert process.wait(timeout=STOP_DEADLINE) == 0
+
+
+def test_a_physical_setting_is_served_over_pva(tmp_path: Path) -> None:
+    """Put a range over PVA in simulation and read its value back."""
+    bitfile = write_fake_bitfile(tmp_path, SETTINGS_REGISTERS)
+    process, prefix = start_service("--simulate", "--bitfile", str(bitfile))
+    wait_for_ready(process)
+    client = Context(
+        "pva", conf={"EPICS_PVA_ADDR_LIST": "127.0.0.1", "EPICS_PVA_AUTO_ADDR_LIST": "NO"}
+    )
+    try:
+        client.put(f"{prefix}:Scanner:X:RangeUm", 20.0)
+        assert wait_for(
+            lambda: abs(client.get(f"{prefix}:Scanner:X:RangeUm_RBV") - 20.0) < 1e-3, 2
+        )
+    finally:
+        client.close()
+        assert process.stdin is not None
+        process.stdin.close()
+
+    assert process.wait(timeout=STOP_DEADLINE) == 0
+
+
+def test_a_zero_calibration_stops_the_service(tmp_path: Path) -> None:
+    """Exit with code 1, without the ready line, when a calibration argument is zero."""
+    bitfile = write_fake_bitfile(tmp_path, SETTINGS_REGISTERS)
+    process, _ = start_service(
+        "--simulate", "--bitfile", str(bitfile), "--calibration", "1", "0", "1"
+    )
+
+    output, _ = process.communicate(timeout=30)
+
+    assert process.returncode == 1
+    assert READY not in output.splitlines()
 
 
 def test_a_missing_bitfile_stops_the_service_before_ready(tmp_path: Path) -> None:

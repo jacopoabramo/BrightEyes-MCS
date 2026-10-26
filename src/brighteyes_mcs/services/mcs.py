@@ -25,6 +25,7 @@ from brighteyes_mcs.logging_setup import logger
 from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, RegisterBackend
 from brighteyes_mcs.services.physical import (
     AUX_AXES,
+    AXES,
     SETTINGS,
     Settings,
     all_registers,
@@ -319,6 +320,46 @@ def parse_options(argv: Sequence[str] | None) -> argparse.Namespace:
         "--simulate", action="store_true", help="hold the registers in memory, without a board"
     )
     parser.add_argument(
+        "--calibration",
+        nargs=3,
+        type=float,
+        default=[1.0, 1.0, 1.0],
+        metavar=("X", "Y", "Z"),
+        help="calibration of the scan axes in micrometres per volt",
+    )
+    parser.add_argument(
+        "--extra-offset",
+        nargs=3,
+        type=float,
+        default=[0.0, 0.0, 0.0],
+        metavar=("X", "Y", "Z"),
+        help="extra offset of the scan axes in volts",
+    )
+    parser.add_argument(
+        "--aux-calibration",
+        nargs=3,
+        type=float,
+        default=[1.0, 1.0, 1.0],
+        metavar=("X2", "Y2", "Z2"),
+        help="calibration of the auxiliary axes in micrometres per volt",
+    )
+    parser.add_argument(
+        "--aux-extra-offset",
+        nargs=3,
+        type=float,
+        default=[0.0, 0.0, 0.0],
+        metavar=("X2", "Y2", "Z2"),
+        help="extra offset of the auxiliary axes in volts",
+    )
+    parser.add_argument(
+        "--aux-limits",
+        nargs=6,
+        type=float,
+        default=[-10.0, 10.0, -10.0, 10.0, -5.0, 5.0],
+        metavar="VOLTS",
+        help="minimum and maximum voltage of X2, then of Y2, then of Z2",
+    )
+    parser.add_argument(
         "--prefix", default=service.prefix if service else "", help="PV prefix of the service"
     )
     parser.add_argument(
@@ -353,6 +394,21 @@ async def serve(controller: McsController, prefix: str) -> None:
             task.cancel()
         await asyncio.gather(serve_task, ready_task, stop_task, return_exceptions=True)
         faulthandler.cancel_dump_traceback_later()
+
+
+def held_settings(options: argparse.Namespace) -> dict[str, Any]:
+    """Return the start value of each setting the service keeps, from the options."""
+    held: dict[str, Any] = {"detector.model": options.detector_model}
+    for index, axis in enumerate(AXES):
+        held[f"scanner.{axis}.calibration_um_per_volt"] = options.calibration[index]
+        held[f"scanner.{axis}.extra_offset_volts"] = options.extra_offset[index]
+    for index, axis in enumerate(AUX_AXES):
+        held[f"aux.{axis}.position_um"] = 0.0
+        held[f"aux.{axis}.calibration_um_per_volt"] = options.aux_calibration[index]
+        held[f"aux.{axis}.extra_offset_volts"] = options.aux_extra_offset[index]
+        held[f"aux.{axis}.min_volts"] = options.aux_limits[2 * index]
+        held[f"aux.{axis}.max_volts"] = options.aux_limits[2 * index + 1]
+    return held
 
 
 def stop_board(manager: McsManager | None, deadline: float) -> bool:
@@ -392,11 +448,17 @@ def stop_board(manager: McsManager | None, deadline: float) -> bool:
 def main(argv: list[str] | None = None) -> int:
     """Serve the registers of the board until the session stops the service.
 
-    Returns 1 when the bitfile cannot be read, the board cannot be connected
-    or serving ends with an error, and 0 once the service has stopped.
+    Returns 1 when a calibration is zero, the bitfile cannot be read, the
+    board cannot be connected or serving ends with an error, and 0 once the
+    service has stopped.
     """
     configure_logging()
     options = parse_options(argv)
+    held = held_settings(options)
+    zero = [path for path, value in held.items() if path.endswith("calibration_um_per_volt") and value == 0]
+    if zero:
+        logger.error("A calibration of zero for %s", ", ".join(zero))
+        return 1
     try:
         bitfile = nifpga.Bitfile(options.bitfile)
     except Exception:
@@ -422,7 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         backend = ManagerRegisters(manager)
 
-    controller = McsController(specs, backend, simulated=options.simulate, held={})
+    controller = McsController(specs, backend, simulated=options.simulate, held=held)
     try:
         # Ctrl+C, the way a service run on its own is stopped, is a clean stop.
         with contextlib.suppress(KeyboardInterrupt):

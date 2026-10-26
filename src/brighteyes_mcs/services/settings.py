@@ -52,7 +52,8 @@ def datatype(setting: Setting) -> DataType[Any]:
         case "floats":
             return Waveform(np.float64, (setting.length,))
         case "ints":
-            return Waveform(np.int64, (setting.length,))
+            # PVAccess's NTNDArray has no 64-bit integer arrays.
+            return Waveform(np.int32, (setting.length,))
         case "text":
             return String()
 
