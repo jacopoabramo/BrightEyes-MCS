@@ -58,6 +58,8 @@ dependencies = [
     "requests",
     "python-multipart",
     "pywin32; platform_system == 'Windows'",
+    "fastcs[epicspva]>=0.14.2",
+    "redsun>=0.15.0",
 ]
 
 [project.optional-dependencies]
@@ -118,6 +120,16 @@ explicit_package_bases = true
 [[tool.mypy.overrides]]
 module = ["brighteyes_mcs_cylibs.*", "h5py.*", "psutil.*", "pyqtgraph.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["fastcs.*", "nifpga.*", "p4p.*"]
+ignore_missing_imports = true
+
+# fastcs ships no py.typed, so every class a service takes from it is Any:
+# subclassing one, or taking its decorator, is an error a stub would fix
+[[tool.mypy.overrides]]
+module = "brighteyes_mcs.services.*"
+disable_error_code = ["misc", "untyped-decorator"]
 
 [dependency-groups]
 dev = [
