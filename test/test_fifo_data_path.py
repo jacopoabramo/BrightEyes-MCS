@@ -9,6 +9,7 @@ import threading
 import time
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -73,6 +74,22 @@ def drain(source: Any) -> list[Any]:
     while not source.empty():
         items.append(source.get_nowait())
     return items
+
+
+class CountingEvent(threading.Event):
+    """Event that counts how often a loop checks or waits on it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.checks = 0
+
+    def is_set(self) -> bool:
+        self.checks += 1
+        return super().is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        self.checks += 1
+        return super().wait(timeout)
 
 
 class FakeRustReader:
@@ -184,3 +201,60 @@ def test_ni_loop_puts_reads_as_uint64_arrays() -> None:
     assert [(fifo, words.dtype, words.tolist()) for fifo, words in items] == [
         ("stream_out_main", np.dtype(np.uint64), [1, 2])
     ]
+
+
+def test_run_check_starts_the_vi_once_without_polling() -> None:
+    """Wait on the run event, start the VI once, and return after stop."""
+    process = control_process(use_rust_fifo=False)
+    fpgarunning = CountingEvent()
+    process.fpgarunning = fpgarunning
+    session = MagicMock()
+    process.nifpga_session = session
+
+    thread = start_thread(process.loop_run_check)
+    time.sleep(0.3)
+    polls_before_set = fpgarunning.checks
+    fpgarunning.set()
+    wait_until(process.fpga_started.is_set)
+    wait_until(lambda: not fpgarunning.is_set())
+    process.stop_event.set()
+    thread.join(1.0)
+
+    assert polls_before_set <= 10
+    assert session.run.call_count == 1
+    assert not thread.is_alive()
+
+
+def test_rust_loop_sleeps_between_reads() -> None:
+    """Check the stop event about twice per 50 ms read period instead of spinning."""
+    process = control_process()
+    stop_event = CountingEvent()
+    process.stop_event = stop_event
+    process.rust_fifo_reader = FakeRustReader([])
+    process.rust_reader_ready.set()
+    process.fifo_last_read_time["stream_out_main"] = time.perf_counter_ns()
+
+    thread = start_thread(process.loop_fifo_read_continuously_rust_fifo, "stream_out_main")
+    time.sleep(0.3)
+    checks = stop_event.checks
+    stop_event.set()
+    thread.join(1.0)
+
+    assert checks <= 20
+
+
+def test_ni_loop_sleeps_after_an_empty_pass() -> None:
+    """Make a bounded number of reads while the FIFO stays empty."""
+    process = control_process(use_rust_fifo=False)
+    fifo = FakeNiFifo([])
+    process.nifpga_session = SimpleNamespace(fifos={"stream_out_main": fifo})
+    process.fpgarunning_internal = True
+    process.fifo_element_remaining["stream_out_main"] = 0
+
+    thread = start_thread(process.loop_fifo_read_continuously)
+    time.sleep(0.3)
+    reads = fifo.calls
+    process.stop_event.set()
+    thread.join(1.0)
+
+    assert reads <= 1000
