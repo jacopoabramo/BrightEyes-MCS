@@ -1,5 +1,8 @@
 """Software frame triggering without a connected FPGA."""
 
+import threading
+import time
+from collections.abc import Callable
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
@@ -288,3 +291,100 @@ def test_pispad23_human_wait_preserves_socket_and_normal_timeout_is_unchanged():
                 with pytest.raises(socket.timeout):
                     source._receive_cs_binary_payload()
                 assert "software_trigger_receiver_ready" not in shared
+
+
+def wait_until(predicate: Callable[[], bool], timeout: float = 5.0) -> None:
+    """Return once `predicate` holds, or fail the test after `timeout` seconds."""
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() > deadline:
+            pytest.fail("condition not reached")
+        time.sleep(0.01)
+
+
+def test_requested_trigger_runs_one_frame_on_the_loop_thread() -> None:
+    """Start the requested frame on the session's own thread."""
+    manager, session = make_session()
+    threads = []
+    manager.quick_reset_fpga.side_effect = lambda: threads.append(threading.current_thread().name)
+    session.start()
+    assert session.request_trigger()
+    wait_until(lambda: session.issued == 1)
+    session.stop()
+    assert threads == ["software-trigger"]
+    writes = manager.fpga_handle.register_write_checked.call_args_list
+    assert writes.count(call("start_command", True)) == 1
+
+
+def test_trigger_request_is_refused_unless_armed() -> None:
+    """Refuse a trigger request while the workers are not ready."""
+    manager = manager_stub()
+    manager.shared_dict["software_trigger_worker_ready"] = False
+    session = SoftwareTriggerSession(manager)
+    manager.software_trigger_session = session
+    session.prepare()
+    session.arm()
+    assert session.state == "preparing"
+    assert session.request_trigger() is False
+    assert not session.awaiting_trigger
+
+
+def test_two_quick_requests_start_one_frame() -> None:
+    """Absorb a second request made before the loop takes the first."""
+    manager, session = make_session()
+    assert session.request_trigger()
+    assert session.request_trigger()
+    session.start()
+    wait_until(lambda: session.issued == 1)
+    for fifo in manager.activated_fifos_list:
+        manager.shared_dict[f"software_trigger_frames_{fifo}"] = 1
+    wait_until(lambda: session.state == "armed")
+    session.stop()
+    assert session.awaiting_trigger
+    assert session.issued == 1
+
+
+def test_geometry_change_is_refused_while_a_request_is_pending() -> None:
+    """Refuse a preview geometry write once the user has asked for a frame."""
+    manager, session = make_session(preview=True)
+    assert session.request_trigger()
+    assert session.update_preview_geometry({"axis_start_offset_volts": [4.0, 5.0, 6.0]}) is False
+    assert manager.registers_configuration["axis_start_offset_volts"] == [1.0, 2.0, 3.0]
+
+
+def test_loop_error_sets_error_state_and_ends_thread() -> None:
+    """Put the session in the error state and end the loop when a pass raises."""
+    manager, session = make_session()
+    manager.check_fpga_alive.side_effect = RuntimeError("bus fault")
+    session.start()
+    session.request_trigger()
+    wait_until(lambda: not session.running)
+    assert session.state == "error"
+    assert session.error == "bus fault"
+
+
+@pytest.mark.parametrize("failure", ["raw_writer_error", "receiver_exit"])
+def test_worker_failure_fails_the_session_from_the_loop(failure: str) -> None:
+    """Fail the session from the loop when a writer reports an error or a worker exits."""
+    manager, session = make_session()
+    if failure == "raw_writer_error":
+        manager.shared_dict["raw_writer_error"] = "disk full"
+    else:
+        manager.process_supervisor.get.side_effect = (
+            lambda name: SimpleNamespace(exitcode=1) if name == "receiver" else None
+        )
+    session.start()
+    wait_until(lambda: not session.running)
+    assert session.state == "error"
+    assert ("disk full" if failure == "raw_writer_error" else "receiver") in session.error
+
+
+def test_stop_ends_the_loop_and_is_safe_to_repeat() -> None:
+    """End the loop on stop, and accept a stop before start or a second stop."""
+    manager, session = make_session()
+    session.stop()
+    session.start()
+    assert session.running
+    session.stop()
+    session.stop()
+    assert not session.running

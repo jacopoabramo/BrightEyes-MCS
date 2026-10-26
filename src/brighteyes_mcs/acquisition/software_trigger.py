@@ -1,8 +1,12 @@
 """One persistent acquisition, driven by independent single-frame FPGA runs."""
 
+from collections.abc import Mapping
 from copy import deepcopy
+import threading
 import time
+from typing import Any
 
+from ..logging_setup import logger
 from .detectors.models import detector_uses_pispad23_pipeline
 
 
@@ -35,6 +39,78 @@ class SoftwareTriggerSession:
             f"laser_{i}_enable": bool(self.requested.get(f"laser_{i}_enable", False))
             for i in range(1, 5)
         }
+        self._thread: threading.Thread | None = None
+        self._stopped = threading.Event()
+        self._wake = threading.Event()
+        self._trigger_pending = False
+
+    @property
+    def awaiting_trigger(self) -> bool:
+        """Whether the session is armed and no frame request is waiting for the loop."""
+        return self.state == "armed" and not self._trigger_pending
+
+    @property
+    def running(self) -> bool:
+        """Whether the loop thread is alive."""
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self) -> None:
+        """Start the thread that runs requested frames and polls the FPGA."""
+        self._thread = threading.Thread(target=self._run, name="software-trigger", daemon=True)
+        self._thread.start()
+
+    def request_trigger(self) -> bool:
+        """Ask the loop to start the next frame, and return whether the request was taken.
+
+        A request is taken only while the session is armed. A second request
+        before the loop starts the frame is absorbed into the first.
+        """
+        if self.state != "armed":
+            return False
+        self._trigger_pending = True
+        self._wake.set()
+        return True
+
+    def stop(self, timeout: float = 10.0) -> None:
+        """End the loop and wait up to `timeout` seconds for its thread to finish."""
+        if self._thread is None:
+            return
+        self._stopped.set()
+        self._wake.set()
+        self._thread.join(timeout)
+        if self._thread.is_alive():
+            logger.warning("Software-trigger loop still running %g s after stop", timeout)
+
+    def _run(self) -> None:
+        try:
+            while not self._stopped.is_set():
+                if self._trigger_pending:
+                    self.trigger()
+                    # Cleared after the frame start, so awaiting_trigger never reads true in between.
+                    self._trigger_pending = False
+                self.poll()
+                self._check_workers()
+                self._wake.wait(0.1)
+                self._wake.clear()
+        except Exception as error:
+            logger.exception("Software-trigger loop failed")
+            self.error = str(error)
+            self.state = "error"
+
+    def _check_workers(self) -> None:
+        shared = self.manager.shared_dict
+        if shared.get("raw_writer_error"):
+            raise RuntimeError(shared["raw_writer_error"])
+        for name in ("receiver", "preprocess", "preview", "raw_writer"):
+            process = self.manager.process_supervisor.get(name)
+            if process is not None and process.exitcode is not None:
+                expected_exit = (
+                    name in ("preview", "raw_writer") and self.total == self.received_frames()
+                )
+                if process.exitcode != 0 or not expected_exit:
+                    raise RuntimeError(
+                        f"The {name} worker stopped during software-trigger acquisition."
+                    )
 
     def prepare(self):
         # max_repetition includes the firmware's terminal repetition.
@@ -80,70 +156,72 @@ class SoftwareTriggerSession:
         offsets[2] += index * geometry["axis_calibration_volts_per_step"][2]
         return offsets
 
-    def update_preview_geometry(self, registers):
+    def update_preview_geometry(self, registers: Mapping[str, Any]) -> bool:
         """Change preview range/position between frames without changing sample counts."""
-        if not self.preview or self.state != "armed":
-            return False
-        allowed = {"axis_start_offset_volts", "axis_calibration_volts_per_step"} | {
-            f"analog_output_{channel}_dc_volts" for channel in range(8)
-        }
-        if not registers or not set(registers).issubset(allowed):
-            return False
-        previous = deepcopy(self.preview_geometry)
-        self.preview_geometry.update(deepcopy(registers))
-        hardware = dict(registers)
-        if set(hardware) & {"axis_start_offset_volts", "axis_calibration_volts_per_step"}:
-            hardware["axis_start_offset_volts"] = self.frame_offsets()
-        try:
-            self.manager.set_registers_dict(hardware)
-        except Exception:
-            self.preview_geometry = previous
-            raise
-        return True
-
-    def trigger(self):
-        if self.state != "armed":
-            return False
-        self.state = "capturing"  # Reject repeated clicks before touching hardware.
-        try:
-            self.manager.quick_reset_fpga()
-            offsets = self.frame_offsets()
-            self.manager.set_registers_dict({"axis_start_offset_volts": offsets})
-            if self.laser_off:
-                self.manager.set_registers_dict(self.lasers)
-                self.manager.set_registers_dict(
-                    {
-                        "laser_force_pulsing_enable": bool(
-                            self.requested.get("laser_force_pulsing_enable", False)
-                        )
-                    }
-                )
-            self.manager.set_registers_dict({"stop_command": False, "start_command": False})
-            self.manager.set_registers_dict({"start_command": True})
-            self.manager.set_registers_dict({"start_command": False})
-            self.issued += 1
-            self.timestamps.append(time.time())
-            self.started_at = time.monotonic()
-            r = self.requested
-            samples = (
-                r["max_pixel"]
-                * r["max_line"]
-                * r["max_time_bins_per_pixel"]
-                * r["max_circular_point"]
-                * r["max_circular_repetition"]
-            )
-            duration = (
-                samples * r["time_bin_dwell_cycles"]
-                + r.get("wait_laser_startup_cycles", 0)
-                + r.get("wait_post_frame_cycles", 0)
-            ) / (self.manager.clock_base * 1e6)
-            # The wait for a human trigger has no timeout. Only an issued frame does.
-            self.deadline = self.started_at + max(30.0, duration * 3 + 10)
+        with self.manager.fpga_access():
+            if not self.preview or self.state != "armed" or self._trigger_pending:
+                return False
+            allowed = {"axis_start_offset_volts", "axis_calibration_volts_per_step"} | {
+                f"analog_output_{channel}_dc_volts" for channel in range(8)
+            }
+            if not registers or not set(registers).issubset(allowed):
+                return False
+            previous = deepcopy(self.preview_geometry)
+            self.preview_geometry.update(deepcopy(registers))
+            hardware = dict(registers)
+            if set(hardware) & {"axis_start_offset_volts", "axis_calibration_volts_per_step"}:
+                hardware["axis_start_offset_volts"] = self.frame_offsets()
+            try:
+                self.manager.set_registers_dict(hardware)
+            except Exception:
+                self.preview_geometry = previous
+                raise
             return True
-        except Exception as error:
-            self.state = "error"
-            self.error = str(error)
-            raise
+
+    def trigger(self) -> bool:
+        with self.manager.fpga_access():
+            if self.state != "armed":
+                return False
+            self.state = "capturing"  # Reject repeated clicks before touching hardware.
+            try:
+                self.manager.quick_reset_fpga()
+                offsets = self.frame_offsets()
+                self.manager.set_registers_dict({"axis_start_offset_volts": offsets})
+                if self.laser_off:
+                    self.manager.set_registers_dict(self.lasers)
+                    self.manager.set_registers_dict(
+                        {
+                            "laser_force_pulsing_enable": bool(
+                                self.requested.get("laser_force_pulsing_enable", False)
+                            )
+                        }
+                    )
+                self.manager.set_registers_dict({"stop_command": False, "start_command": False})
+                self.manager.set_registers_dict({"start_command": True})
+                self.manager.set_registers_dict({"start_command": False})
+                self.issued += 1
+                self.timestamps.append(time.time())
+                self.started_at = time.monotonic()
+                r = self.requested
+                samples = (
+                    r["max_pixel"]
+                    * r["max_line"]
+                    * r["max_time_bins_per_pixel"]
+                    * r["max_circular_point"]
+                    * r["max_circular_repetition"]
+                )
+                duration = (
+                    samples * r["time_bin_dwell_cycles"]
+                    + r.get("wait_laser_startup_cycles", 0)
+                    + r.get("wait_post_frame_cycles", 0)
+                ) / (self.manager.clock_base * 1e6)
+                # The wait for a human trigger has no timeout. Only an issued frame does.
+                self.deadline = self.started_at + max(30.0, duration * 3 + 10)
+                return True
+            except Exception as error:
+                self.state = "error"
+                self.error = str(error)
+                raise
 
     def received_frames(self):
         counts = []
@@ -157,7 +235,7 @@ class SoftwareTriggerSession:
                 counts.append(self.manager.shared_dict.get(f"software_trigger_frames_{fifo}", 0))
         return min(counts, default=0)
 
-    def poll(self):
+    def poll(self) -> None:
         if self.state == "preparing":
             self.arm()
             return
