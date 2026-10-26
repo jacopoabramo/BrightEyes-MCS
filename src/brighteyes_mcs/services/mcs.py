@@ -70,7 +70,7 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
             # The attribute holds a double, but the board takes only integers.
             value = int(value)
         try:
-            await self.backend.write(attr.io_ref.name, value)
+            await self.backend.write_many({attr.io_ref.name: value})
         except Exception:
             await self.read_back(attr.io_ref.name)
             raise

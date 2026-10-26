@@ -18,8 +18,8 @@ class RegisterBackend(Protocol):
         """Return the value of each register, or `None` when the board is busy."""
         ...
 
-    async def write(self, name: str, value: Any) -> None:
-        """Write one register."""
+    async def write_many(self, values: Mapping[str, Any]) -> None:
+        """Write each register of `values`, in order, in one call to the board."""
         ...
 
     def on_write(self, listener: Callable[[str], None]) -> None:
@@ -47,10 +47,11 @@ class DictRegisters:
     async def read(self, names: Sequence[str]) -> dict[str, Any] | None:
         return {name: self.values[name] for name in names}
 
-    async def write(self, name: str, value: Any) -> None:
-        self.values[name] = value
-        for listener in self.listeners:
-            listener(name)
+    async def write_many(self, values: Mapping[str, Any]) -> None:
+        self.values.update(values)
+        for name in values:
+            for listener in self.listeners:
+                listener(name)
 
     def on_write(self, listener: Callable[[str], None]) -> None:
         self.listeners.append(listener)
@@ -85,9 +86,9 @@ class ManagerRegisters:
                 values, self.manager.detector_model, direction=-1
             )
 
-    async def write(self, name: str, value: Any) -> None:
+    async def write_many(self, values: Mapping[str, Any]) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self.executor, self.manager.set_registers_dict, {name: value})
+        await loop.run_in_executor(self.executor, self.manager.set_registers_dict, dict(values))
 
     def on_write(self, listener: Callable[[str], None]) -> None:
         """Call `listener` after each write the manager's FPGA handle makes.

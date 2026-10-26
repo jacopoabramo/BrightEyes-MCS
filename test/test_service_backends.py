@@ -5,7 +5,7 @@ import threading
 import time
 from collections import defaultdict
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import nifpga
 import pytest
@@ -66,23 +66,36 @@ def test_dict_registers_start_from_zero_and_the_defaults() -> None:
     assert "not_a_register" not in values
 
 
-def test_dict_registers_store_writes_and_notify() -> None:
-    """Store a written value, read it back and notify the write listener."""
+def test_dict_registers_write_many_stores_and_notifies_in_order() -> None:
+    """Store every value of one call and notify each name in order."""
     backend = DictRegisters(fake_specs(), {})
     names: list[str] = []
     backend.on_write(names.append)
 
-    asyncio.run(backend.write("max_pixel", 7))
+    asyncio.run(backend.write_many({"max_pixel": 5, "current_x_index": 2}))
 
-    assert asyncio.run(backend.read(["max_pixel"])) == {"max_pixel": 7}
-    assert names == ["max_pixel"]
+    assert asyncio.run(backend.read(["max_pixel", "current_x_index"])) == {
+        "max_pixel": 5,
+        "current_x_index": 2,
+    }
+    assert names == ["max_pixel", "current_x_index"]
+
+
+def test_manager_registers_write_many_makes_one_manager_call() -> None:
+    """Pass all values of one call to the manager in one `set_registers_dict`."""
+    manager = MagicMock(spec=McsManager)
+    backend = ManagerRegisters(manager)
+
+    asyncio.run(backend.write_many({"max_pixel": 5, "max_line": 6}))
+
+    assert manager.set_registers_dict.call_args_list == [call({"max_pixel": 5, "max_line": 6})]
 
 
 def test_manager_registers_write_through_the_manager_rules() -> None:
     """Apply the manager's rules to a write, such as keeping the main stream off for PISPAD23."""
     backend = ManagerRegisters(connected_manager())
 
-    asyncio.run(backend.write("stream_out_main_enable", True))
+    asyncio.run(backend.write_many({"stream_out_main_enable": True}))
 
     assert asyncio.run(backend.read(["stream_out_main_enable"])) == {
         "stream_out_main_enable": False
@@ -94,7 +107,7 @@ def test_manager_registers_read_back_the_written_dimensions() -> None:
     manager = connected_manager()
     backend = ManagerRegisters(manager)
 
-    asyncio.run(backend.write("max_pixel", 64))
+    asyncio.run(backend.write_many({"max_pixel": 64}))
 
     assert asyncio.run(backend.read(["max_pixel"])) == {"max_pixel": 64}
 
@@ -127,7 +140,7 @@ def test_manager_registers_listen_on_the_handle() -> None:
     names: list[str] = []
     backend.on_write(names.append)
 
-    asyncio.run(backend.write("max_pixel", 64))
+    asyncio.run(backend.write_many({"max_pixel": 64}))
 
     assert names == ["max_pixel"]
 
@@ -147,7 +160,7 @@ def test_a_stuck_write_does_not_hold_up_the_exit(monkeypatch: pytest.MonkeyPatch
     backend = ManagerRegisters(manager)
 
     async def main() -> None:
-        write = asyncio.ensure_future(backend.write("max_pixel", 1))
+        write = asyncio.ensure_future(backend.write_many({"max_pixel": 1}))
         await asyncio.sleep(0.05)
         write.cancel()
 
