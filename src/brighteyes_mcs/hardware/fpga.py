@@ -63,8 +63,6 @@ class FpgaHandle(object):
             "stop_event": self.mp_manager.Event(),
             "stop_done_event": self.mp_manager.Event(),
             "print_event": self.mp_manager.Event(),
-            "queueFifoWrite": self.mp_manager.Queue(),
-            "queueFifoReadReq": self.mp_manager.Queue(),
             "queueFifoRead": self.mp_manager.Queue(),
             "is_connected": self.mp_manager.Event(),
             "is_readytorun": self.mp_manager.Event(),
@@ -282,18 +280,6 @@ class FpgaHandle(object):
             self.configuration["initial_registers"][register] = data
             return
         self.nifpga_obj.registers[register].write(data)
-
-    #
-    # def fifo_read(self, fifoname, timeout):
-    #     self.configuration["queueFifoReadReq"].put(
-    #         [
-    #             fifoname,
-    #         ]
-    #     )
-    #     return self.configuration["queueFifoRead"].get(timeout=timeout)
-    #
-    # def read_fifo(self, fifo, timeout):
-    #     return self.configuration["queueFifoRead"].get(timeout)
 
     def set_fifo_chuck_size_digital(self, fifo_chuck_size_digital):
         logger.debug("%s %s", "set_fifo_chuck_size_digital", fifo_chuck_size_digital)
