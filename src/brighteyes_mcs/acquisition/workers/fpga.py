@@ -1,6 +1,7 @@
 import multiprocessing as mp
 from threading import Thread
 import nifpga
+import numpy as np
 from brighteyes_mcs.logging_setup import logged_worker, logger
 from time import perf_counter_ns, sleep
 from ..detectors.models import (
@@ -135,11 +136,10 @@ class FpgaHandleProcess(mp.Process):
             self.rust_reader_ready.clear()
             self.rust_fifo_reader.close()
 
-    def loop_fifo_read_continuously(self):
+    def loop_fifo_read_continuously(self) -> None:
         while not self.stop_event.is_set():
             temp_list = list(self.list_fifos_to_read_continously)
             if self.fpgarunning_internal and len(temp_list) != 0:
-                out_dict = {}
                 for current_fifo in temp_list:
                     # with self.semaphore:
                     #     with self.queue_fifo_read._rlock:
@@ -161,18 +161,17 @@ class FpgaHandleProcess(mp.Process):
                         read_data = self.nifpga_session.fifos[current_fifo].read(
                             elements_to_be_read, self.timeout_fifos
                         )
-                        length = len(read_data.data)
                         self.fifo_element_remaining[current_fifo] = read_data.elements_remaining
 
-                        if length > 0:
-                            out_dict[current_fifo] = [read_data.data, length]
-                            self.queue_fifo_read.put(out_dict)
+                        if len(read_data.data) > 0:
+                            words = np.asarray(read_data.data, dtype=np.uint64)
+                            # TODO: send to the sharedbox FIFO stream.
+                            self.queue_fifo_read.put((current_fifo, words))
 
                     except nifpga.FifoTimeoutError:
                         pass
 
-    def loop_fifo_read_continuously_rust_fifo(self, current_fifo):
-        out_dict = {}
+    def loop_fifo_read_continuously_rust_fifo(self, current_fifo: str) -> None:
         self.rust_reader_ready.wait()
         while not self.stop_event.is_set():
             current_time = perf_counter_ns()
@@ -180,10 +179,9 @@ class FpgaHandleProcess(mp.Process):
             if delta_time > self.timeout_fifos:
                 read_data = self.rust_fifo_reader.read_data(current_fifo)
                 self.fifo_last_read_time[current_fifo] = current_time
-                length = len(read_data)
-                if length > 0:
-                    out_dict[current_fifo] = [read_data, length]
-                    self.queue_fifo_read.put_nowait(out_dict)
+                if len(read_data) > 0:
+                    # TODO: send to the sharedbox FIFO stream.
+                    self.queue_fifo_read.put_nowait((current_fifo, read_data))
         logger.debug("self.stop_event.is_set()")
 
     def _uses_nifpga_fifo(self):
@@ -299,6 +297,8 @@ class FpgaHandleProcess(mp.Process):
                     )
             logger.debug("initial_registers done")
 
+            # Losing the last packets at exit is acceptable; FpgaHandle.stop terminates this process.
+            self.queue_fifo_read.cancel_join_thread()
             empty_queue(self.queue_fifo_read)
 
             self.is_readytorun.set()
