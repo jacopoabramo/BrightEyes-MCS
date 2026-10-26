@@ -9,14 +9,16 @@ writes for the same value.
 from __future__ import annotations
 
 import enum
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
 import numpy as np
 
 from brighteyes_mcs.acquisition.registers import (
+    ANALOG_OUTPUT_SOURCES,
     CIRCULAR_REGISTER_LENGTH,
+    CONSTANT_SOURCE_SELECTOR,
     LASER_SEQUENCE_LENGTH,
     AnalogInputs,
     AnalogOutputs,
@@ -25,6 +27,7 @@ from brighteyes_mcs.acquisition.registers import (
     ScanArea,
     ScanLimits,
     ScanOptions,
+    WAIT_CLOCK_HZ,
     StreamSelection,
     Timing,
 )
@@ -390,3 +393,135 @@ def served(register_names: Collection[str]) -> list[str]:
     """Return the paths of the settings whose registers are all in `register_names`."""
     available = frozenset(register_names)
     return [path for path, setting in SETTINGS.items() if setting.registers <= available]
+
+
+def source_of(selector: int) -> Source:
+    """Return the source an analog output's selector value names.
+
+    Raises
+    ------
+    ValueError
+        When the value names no source.
+    """
+    if selector == CONSTANT_SOURCE_SELECTOR:
+        return Source.CONSTANT
+    if 0 <= selector < len(ANALOG_OUTPUT_SOURCES):
+        return Source(ANALOG_OUTPUT_SOURCES[selector])
+    raise ValueError(f"Selector {selector} names no analog output source")
+
+
+def auxiliary_position(raw: Mapping[str, Any], held: Mapping[str, Any], axis: str) -> float:
+    """Return an auxiliary axis's position from the first output sending it, or its held one."""
+    for channel in OUTPUTS:
+        try:
+            source = source_of(raw[f"analog_output_{channel}_source_selector"])
+        except ValueError:
+            continue
+        if source.value.lower() == axis:
+            volts = float(raw[f"analog_output_{channel}_dc_volts"])
+            extra = held[f"aux.{axis}.extra_offset_volts"]
+            return (volts - extra) * held[f"aux.{axis}.calibration_um_per_volt"]
+    return float(held[f"aux.{axis}.position_um"])
+
+
+def derived_value(path: str, raw: Mapping[str, Any], held: Mapping[str, Any]) -> Any:
+    """Return the value of the setting `path` computed from the registers and held values.
+
+    Raises
+    ------
+    KeyError
+        When a register or held value it needs is missing.
+    ValueError
+        When the registers name no valid value, such as an unknown source.
+    """
+    setting = SETTINGS[path]
+    match path.split("."):
+        case ["grid", count] if count in COUNTS.values():
+            axis = next(axis for axis, name in COUNTS.items() if name == count)
+            return int(raw[COUNT_REGISTERS[axis]])
+        case ["grid", "time_bins_per_pixel"]:
+            return int(raw["max_time_bins_per_pixel"])
+        case ["scanner", axis, "range_um"]:
+            step = float(raw["axis_calibration_volts_per_step"][AXES.index(axis)])
+            calibration = held[f"scanner.{axis}.calibration_um_per_volt"]
+            return step * calibration * int(raw[COUNT_REGISTERS[axis]])
+        case ["scanner", axis, "offset_um"]:
+            start = float(raw["axis_start_offset_volts"][AXES.index(axis)])
+            calibration = held[f"scanner.{axis}.calibration_um_per_volt"]
+            extra = held[f"scanner.{axis}.extra_offset_volts"]
+            range_um = derived_value(f"scanner.{axis}.range_um", raw, held)
+            return (start - extra) * calibration + range_um / 2
+        case ["pattern", name] if name.startswith("offsets_"):
+            axis = name.removeprefix("offsets_").removesuffix("_um")
+            volts = np.asarray(raw[f"circular_scan_{axis}_volts"], float)
+            return volts * held[f"scanner.{axis}.calibration_um_per_volt"]
+        case ["timing", "time_resolution_us"]:
+            return int(raw["time_bin_dwell_cycles"]) / CLOCK_MHZ
+        case ["timing", "wait_for_laser_s"]:
+            return int(raw["wait_laser_startup_cycles"]) / WAIT_CLOCK_HZ
+        case ["timing", "wait_after_frame_s"]:
+            return int(raw["wait_post_frame_cycles"]) / WAIT_CLOCK_HZ
+        case ["timing", "laser_sequence"]:
+            return np.asarray(raw["laser_excitation_sequence"], int)
+        case ["aux", axis, "position_um"]:
+            return auxiliary_position(raw, held, axis)
+        case ["analog_out", channel, "source"]:
+            return source_of(int(raw[f"analog_output_{channel}_source_selector"]))
+    (register,) = setting.writes
+    match setting.kind:
+        case "bool":
+            return bool(raw[register])
+        case "int":
+            return int(raw[register])
+        case _:
+            return float(raw[register])
+
+
+def derive(
+    raw: Mapping[str, Any], held: Mapping[str, Any], paths: Collection[str]
+) -> tuple[Settings, dict[str, Exception]]:
+    """Return the settings of `paths` the registers and held values give, and why others fail.
+
+    Held settings are left out, except the auxiliary positions, which an
+    output sending the axis holds.
+    """
+    derived: Settings = {}
+    failures: dict[str, Exception] = {}
+    for path in paths:
+        if SETTINGS[path].held and not path.endswith(".position_um"):
+            continue
+        try:
+            derived[path] = derived_value(path, raw, held)
+        except (ArithmeticError, KeyError, ValueError) as error:
+            failures[path] = error
+    return derived, failures
+
+
+def tolerance(path: str, settings: Settings, steps: Mapping[str, float]) -> float:
+    """Return the largest difference between a value set and the value read back.
+
+    The difference comes from the resolution of the registers: the step of
+    each fixed-point register in `steps`, and one cycle of a cycle count.
+    """
+    setting = SETTINGS[path]
+    if setting.kind not in ("float", "floats"):
+        return 0.0
+    match path.split("."):
+        case ["timing", "time_resolution_us"]:
+            return 1 / CLOCK_MHZ
+        case ["timing", "wait_for_laser_s" | "wait_after_frame_s"]:
+            return 1 / WAIT_CLOCK_HZ
+        case ["scanner", axis, "range_um" | "offset_um" as name]:
+            calibration = abs(settings[f"scanner.{axis}.calibration_um_per_volt"])
+            count = settings[f"grid.{COUNTS[axis]}"]
+            if name == "range_um":
+                return steps["axis_calibration_volts_per_step"] * calibration * count
+            return steps["axis_start_offset_volts"] * calibration * (1 + count / 2)
+        case ["pattern", name]:
+            axis = name.removeprefix("offsets_").removesuffix("_um")
+            calibration = abs(settings[f"scanner.{axis}.calibration_um_per_volt"])
+            return steps[f"circular_scan_{axis}_volts"] * calibration
+        case ["aux", axis, "position_um"]:
+            calibration = abs(settings[f"aux.{axis}.calibration_um_per_volt"])
+            return max(steps[f"analog_output_{channel}_dc_volts"] for channel in OUTPUTS) * calibration
+    return max((steps.get(register, 0.0) for register in setting.writes), default=0.0)
