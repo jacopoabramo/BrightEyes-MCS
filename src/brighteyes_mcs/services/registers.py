@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from importlib import resources
 from typing import Any, Final
 
 import numpy as np
@@ -183,6 +184,41 @@ def array_datatype(kind: NiType, element_type: Any, length: int) -> DataType[Any
         step=step,
         whole=kind in INTEGER_RANGES,
     )
+
+
+def read_descriptions(text: str) -> dict[str, str]:
+    """Return the description of each register row of a Markdown register table.
+
+    A register row has four cells, a name that is not bold and a type. The
+    header, the separator and the bold section rows are skipped. A section
+    noted "(for all channels from 0 to 7)" describes its registers once, under
+    channel 7, so each of its rows describes the same register of channels 0
+    to 7.
+    """
+    descriptions = {}
+    all_channels = False
+    for line in text.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4:
+            continue
+        name, kind, _, description = cells
+        if name.startswith("**"):
+            all_channels = False
+        elif name.startswith("(for all channels"):
+            all_channels = True
+        if not kind or name.startswith("**") or name == "Name" or set(name) <= {"-"}:
+            continue
+        descriptions[name] = description
+        if all_channels:
+            for channel in range(7):
+                descriptions[name.replace("_7_", f"_{channel}_")] = description
+    return descriptions
+
+
+def load_descriptions() -> dict[str, str]:
+    """Return the descriptions of the register table packaged with the service."""
+    table = resources.files(__package__).joinpath("registers.md")
+    return read_descriptions(table.read_text(encoding="utf-8"))
 
 
 def register_specs(bitfile: Any, descriptions: Mapping[str, str]) -> list[RegisterSpec]:

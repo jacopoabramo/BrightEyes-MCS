@@ -9,13 +9,24 @@ import pytest
 from fastcs.datatypes import Bool, DataType, Int
 
 from brighteyes_mcs.services.registers import (
+    NO_DESCRIPTION,
     ExactWaveform,
     FxpFloat,
     RegisterSpec,
     WholeFloat,
+    load_descriptions,
+    read_descriptions,
     register_specs,
 )
 from test.fake_bitfile import fake_bitfile_xml
+
+TABLE = """\
+| Name | Type | Read/Write | Description |
+|------|------|------------|-------------|
+| **Main** | | | |
+| start_command | Bool | RW | Start the scanning |
+| max_pixel | I32 | RW | Number of pixel (X) |
+"""
 
 
 def fake_specs() -> dict[str, RegisterSpec]:
@@ -135,3 +146,42 @@ def test_array_of_the_wrong_length_is_refused() -> None:
     with pytest.raises(ValueError):
         datatype.validate([0.0, 0.0])
     assert datatype.validate([0.0, 1.00001, -1.0]).tolist() == [0.0, 1.0, -1.0]
+
+
+def test_descriptions_parse_rows_and_skip_sections() -> None:
+    """Read the description of each register row, skipping the header and section rows."""
+    assert read_descriptions(TABLE) == {
+        "start_command": "Start the scanning",
+        "max_pixel": "Number of pixel (X)",
+    }
+
+
+def test_registers_without_a_row_get_no_description() -> None:
+    """Describe a register from its row, and one without a row as having no description."""
+    bitfile = nifpga.Bitfile(fake_bitfile_xml(), parse_contents=True)
+    specs = {spec.name: spec for spec in register_specs(bitfile, read_descriptions(TABLE))}
+
+    assert specs["max_pixel"].description == "Number of pixel (X)"
+    assert specs["current_x_index"].description == NO_DESCRIPTION
+
+
+def test_packaged_table_describes_the_main_registers() -> None:
+    """Read the descriptions from the table packaged with the service."""
+    assert load_descriptions()["start_command"] == "Start the scanning"
+
+
+def test_channel_rows_describe_every_channel() -> None:
+    """Describe channels 0 to 7 from a channel 7 row under the all-channels note."""
+    table = (
+        "| **Analog Output** | | | |\n"
+        "| (for all channels from 0 to 7) | | | |\n"
+        "| analog_output_7_volts | Fxp | RW | Output voltage |\n"
+        "| **Main** | | | |\n"
+        "| laser_7_enable | Bool | RW | Laser 7 |\n"
+    )
+
+    descriptions = read_descriptions(table)
+
+    assert descriptions["analog_output_0_volts"] == "Output voltage"
+    assert descriptions["analog_output_7_volts"] == "Output voltage"
+    assert "laser_0_enable" not in descriptions
