@@ -4253,12 +4253,15 @@ class MainWindow(QMainWindow):
         self.ui.pushButton_updateCircularView.setEnabled(bool(active))
 
     @Slot()
-    def updateTables(self):
+    def updateTables(self) -> None:
         """
         Update the Status tables
         """
         if self.mcs_manager.is_connected == True:
-            fff = self.mcs_manager.fpga_handle.register_read_all()
+            with self.mcs_manager.fpga_access(wait=False) as free:
+                if not free:
+                    return
+                fff = self.mcs_manager.fpga_handle.register_read_all()
         else:
             fff = self.mcs_manager.get_registers_configuration()
         self._latest_status_registers = dict(fff)
@@ -6468,14 +6471,18 @@ Have fun!
             self.ui.label_FPGA_status.setToolTip("Click Connect FPGA to open the FPGA session.")
 
     @Slot()
-    def _fpgaWatchdogTick(self):
+    def _fpgaWatchdogTick(self) -> None:
         """Poll the FPGA and blink its status label after successful reads."""
         if not self.mcs_manager.is_connected:
             self._update_fpga_connection_button()
             return
 
         try:
-            status = self.mcs_manager.check_fpga_alive()
+            # A busy lock means another thread is using the FPGA, so it is not a failure.
+            with self.mcs_manager.fpga_access(wait=False) as free:
+                if not free:
+                    return
+                status = self.mcs_manager.check_fpga_alive()
         except Exception as error:
             self._fpga_watchdog_blink_on = False
             self.ui.label_FPGA_status.setText("● FPGA not responding")

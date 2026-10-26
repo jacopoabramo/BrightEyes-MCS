@@ -14,6 +14,7 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
     source = textwrap.dedent('''
         import sys
         import math
+        import time
         from types import MethodType
         from unittest.mock import MagicMock
         import h5py
@@ -22,6 +23,12 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         from brighteyes_mcs.ui.qt.main_window import MainWindow
         from brighteyes_mcs.ui.controllers.software_trigger import SoftwareTriggerController
         from test.test_software_trigger import manager_stub
+
+        def wait_until(predicate, timeout=5.0):
+            deadline = time.monotonic() + timeout
+            while not predicate():
+                assert time.monotonic() < deadline, "condition not reached"
+                time.sleep(0.01)
 
         class Window(QMainWindow):
             def offset_um_Changed(self, force=False):
@@ -125,11 +132,13 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         assert not ui.spinBox_off_x_um.isEnabled()
         assert not ui.spinBox_off_x2_um.isEnabled()
         assert not ui.spinBox_range_x.isEnabled()
+        wait_until(lambda: controller.session.issued == 1)
         window.setRegistersDict({"axis_start_offset_volts": [99, 99, 99]})
         assert window.mcs_manager.registers_configuration["axis_start_offset_volts"] == offsets
         for fifo in window.mcs_manager.activated_fifos_list:
             window.mcs_manager.shared_dict[f"software_trigger_frames_{fifo}"] = 1
-        controller.poll()
+        wait_until(lambda: controller.session.completed == 1)
+        controller.refresh()
         assert ("Frames completed: 1" if preview else "1/6") in controller.label.text()
         assert ui.pushButton_sw_trigger_cmd.isEnabled()
         for name in controller.GEOMETRY_WIDGET_NAMES:
@@ -137,7 +146,14 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         if not preview:
             with h5py.File(sys.argv[1], "w"):
                 pass
+        session = controller.session
+        order = []
+        real_stop, real_lasers_off = session.stop, session.lasers_off
+        session.stop = lambda *args: (order.append("stop"), real_stop(*args))
+        session.lasers_off = lambda: (order.append("lasers_off"), real_lasers_off())
         controller.before_stop()
+        assert order[:2] == ["stop", "lasers_off"]
+        assert not session.running
         controller.finish()
         assert ui.spinBox_nframe.isEnabled()
         assert ui.checkBox_sw_trigger_enable.isEnabled()
@@ -155,6 +171,19 @@ def test_trigger_widgets_and_early_stop_metadata(tmp_path, preview):
         window.setRegistersDict({"max_frame": 42})
         assert window.mcs_manager.registers_configuration["max_frame"] == 42
         assert ui.groupBox_27.isEnabled() and ui.groupBox_28.isEnabled()
+        ui.checkBox_sw_trigger_enable.setChecked(True)
+        controller.prepare(preview=preview)
+        window.mcs_manager.read_registers_dict()
+        controller.arm()
+        window.stop = MagicMock()
+        controller.session.error = "boom"
+        controller.session.state = "error"
+        controller.refresh()
+        controller.refresh()
+        window.stop.assert_called_once_with()
+        assert not controller.timer.isActive()
+        controller.before_stop()
+        controller.finish()
         print("TRIGGER_GUI_OK", flush=True)
     ''')
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", BRIGHTEYES_LOG_DIR=str(tmp_path / "logs"))

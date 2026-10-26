@@ -445,6 +445,33 @@ def test_watchdog_blinks_green_after_successful_register_read():
     assert window._fpga_watchdog_blink_on is True
 
 
+def test_status_tables_skip_the_read_while_the_fpga_is_busy() -> None:
+    """Leave the status tables alone while another thread holds the FPGA."""
+    window = MainWindow.__new__(MainWindow)
+    window.ui = MagicMock()
+    window.mcs_manager = MagicMock(is_connected=True)
+    window.mcs_manager.fpga_access.return_value = contextlib.nullcontext(False)
+
+    window.updateTables()
+
+    window.mcs_manager.fpga_handle.register_read_all.assert_not_called()
+    assert window.ui.mock_calls == []
+
+
+def test_watchdog_skips_the_tick_while_the_fpga_is_busy() -> None:
+    """Show no error while another thread holds the FPGA."""
+    window = MainWindow.__new__(MainWindow)
+    label = MagicMock()
+    window.ui = SimpleNamespace(label_FPGA_status=label)
+    window.mcs_manager = MagicMock(is_connected=True)
+    window.mcs_manager.fpga_access.return_value = contextlib.nullcontext(False)
+
+    window._fpgaWatchdogTick()
+
+    window.mcs_manager.check_fpga_alive.assert_not_called()
+    label.setText.assert_not_called()
+
+
 def test_watchdog_reports_failed_register_read():
     window = MainWindow.__new__(MainWindow)
     label = MagicMock()

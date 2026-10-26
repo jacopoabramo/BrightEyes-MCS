@@ -49,7 +49,7 @@ class SoftwareTriggerController:
         self.ui.pushButton_sw_trigger_cmd.clicked.connect(self.trigger)
         self.timer = QTimer(window)
         self.timer.setInterval(100)
-        self.timer.timeout.connect(self.poll)
+        self.timer.timeout.connect(self.refresh)
         self.update_controls()
 
     @property
@@ -64,12 +64,12 @@ class SoftwareTriggerController:
         return self.ui.checkBox_sw_trigger_enable.isChecked()
 
     @property
-    def preview_geometry_editable(self):
+    def preview_geometry_editable(self) -> bool:
         return (
             self.active
             and self.session.preview
             and not self.stopping
-            and self.session.state == "armed"
+            and self.session.awaiting_trigger
         )
 
     def update_preview_geometry(self, registers):
@@ -98,7 +98,7 @@ class SoftwareTriggerController:
             self.ui.checkBox_sw_trigger_enable.setChecked(False)
         self.update_controls()
 
-    def update_controls(self):
+    def update_controls(self) -> None:
         for widget, enabled in self.geometry_widgets:
             if widget is self.ui.spinBox_range_y:
                 enabled = not self.ui.checkBoxLockRatio.isChecked()
@@ -108,7 +108,7 @@ class SoftwareTriggerController:
         self.ui.checkBox_sw_trigger_enable.setEnabled(not self.active)
         self.ui.checkBox_sw_trigger_laser_off.setEnabled(self.selected() and not self.active)
         self.ui.pushButton_sw_trigger_cmd.setEnabled(
-            self.active and not self.stopping and self.session.state == "armed"
+            self.active and not self.stopping and self.session.awaiting_trigger
         )
         if not self.active:
             self.label.setText("Start Preview or Acquisition to arm." if self.selected() else "")
@@ -168,9 +168,10 @@ class SoftwareTriggerController:
         self._lock_settings()
         self.update_controls()
 
-    def arm(self):
+    def arm(self) -> None:
         if self.active:
             self.session.arm()
+            self.session.start()
             self.timer.start()
             self.update_controls()
 
@@ -210,55 +211,43 @@ class SoftwareTriggerController:
                     self.locked_widgets.append((widget, True))
                     widget.setEnabled(False)
 
-    def trigger(self):
+    def trigger(self) -> None:
         if not self.active or self.stopping:
             return
-        # Disable synchronously, before a register write can process more events.
         self.ui.pushButton_sw_trigger_cmd.setEnabled(False)
         for widget, _enabled in self.geometry_widgets:
             widget.setEnabled(False)
-        try:
-            self.session.trigger()
-        except Exception as error:
-            self.fail(error)
+        self.session.request_trigger()
         self.update_controls()
 
-    def poll(self):
-        if not self.active or self.stopping:
+    def refresh(self) -> None:
+        if not self.active or self.stopping or not self.timer.isActive():
             return
-        try:
-            self.session.poll()
-            manager = self.window.mcs_manager
-            if manager.shared_dict.get("raw_writer_error"):
-                raise RuntimeError(manager.shared_dict["raw_writer_error"])
-            for name in ("receiver", "preprocess", "preview", "raw_writer"):
-                process = manager.process_supervisor.get(name)
-                if process is not None and process.exitcode is not None:
-                    expected_exit = (
-                        name in ("preview", "raw_writer")
-                        and self.session.total == self.session.received_frames()
-                    )
-                    if process.exitcode != 0 or not expected_exit:
-                        raise RuntimeError(
-                            f"The {name} worker stopped during software-trigger acquisition."
-                        )
+        if self.session.state == "error":
+            self.fail(self.session.error)
+        else:
             self.update_controls()
-        except Exception as error:
-            self.fail(error)
 
-    def fail(self, error):
-        logger.exception("Software-trigger acquisition failed")
+    def fail(self, error: BaseException | str) -> None:
+        # Stopped first, so a tick before the window finishes stopping cannot fail twice.
+        self.timer.stop()
+        logger.error(
+            "Software-trigger acquisition failed: %s",
+            error,
+            exc_info=error if isinstance(error, BaseException) else None,
+        )
         self.session.error = str(error)
         self.session.state = "error"
         self.window.stop()
         self.label.setText(f"Software trigger error: {error}")
         self.ui.statusBar.showMessage(str(error), 15000)
 
-    def before_stop(self):
+    def before_stop(self) -> None:
         if not self.active or self.stopping:
             return
         self.stopping = True
         self.timer.stop()
+        self.session.stop()
         self.ui.pushButton_sw_trigger_cmd.setEnabled(False)
         if self.session.laser_off and self.window.mcs_manager.is_connected:
             try:
