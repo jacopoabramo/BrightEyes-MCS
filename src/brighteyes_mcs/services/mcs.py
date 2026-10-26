@@ -7,7 +7,7 @@ import asyncio
 import contextlib
 import faulthandler
 import threading
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -23,6 +23,16 @@ from brighteyes_mcs.acquisition.detectors.models import DETECTOR_SPAD_ARRAY
 from brighteyes_mcs.acquisition.manager import DEFAULT_REGISTERS, McsManager
 from brighteyes_mcs.logging_setup import logger
 from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, RegisterBackend
+from brighteyes_mcs.services.physical import (
+    AUX_AXES,
+    SETTINGS,
+    Settings,
+    all_registers,
+    defaults,
+    derive,
+    served,
+    writes,
+)
 from brighteyes_mcs.services.registers import (
     NO_DESCRIPTION,
     RegisterSpec,
@@ -30,6 +40,7 @@ from brighteyes_mcs.services.registers import (
     load_descriptions,
     register_specs,
 )
+from brighteyes_mcs.services.settings import SettingIO, build_tree
 
 #: Seconds between two reads of the indicator registers.
 INDICATOR_PERIOD: Final = 0.5
@@ -52,14 +63,18 @@ class RegisterRef(AttributeIORef):
 
 
 class RegisterIO(AttributeIO[Any, RegisterRef]):
-    """Writes an attribute's register through the backend."""
+    """Writes an attribute's register through the backend, holding `lock` while it does."""
 
     def __init__(
-        self, backend: RegisterBackend, read_back: Callable[[str], Awaitable[None]]
+        self,
+        backend: RegisterBackend,
+        read_back: Callable[[str], Awaitable[None]],
+        lock: asyncio.Lock,
     ) -> None:
         super().__init__()
         self.backend = backend
         self.read_back = read_back
+        self.lock = lock
 
     async def update(self, attr: AttrR[Any, RegisterRef]) -> None:
         await self.read_back(attr.io_ref.name)
@@ -69,24 +84,36 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
         if isinstance(attr.datatype, WholeFloat):
             # The attribute holds a double, but the board takes only integers.
             value = int(value)
-        try:
-            await self.backend.write_many({attr.io_ref.name: value})
-        except Exception:
-            await self.read_back(attr.io_ref.name)
-            raise
+        async with self.lock:
+            try:
+                await self.backend.write_many({attr.io_ref.name: value})
+            except Exception:
+                await self.read_back(attr.io_ref.name)
+                raise
 
 
 class McsController(Controller):
-    """Serves each register of `specs` under the `registers` sub-controller.
+    """Serves each register of `specs` under `registers`, and the settings in physical units.
 
     A register's attribute is refreshed after each write the backend reports,
     from any thread, and indicators are read again every `INDICATOR_PERIOD`
     seconds. A written register whose read-back found the board busy is read
-    again with the indicators until a read succeeds.
+    again with the indicators until a read succeeds. The settings are derived
+    again after each read of a register they depend on.
+
+    Parameters
+    ----------
+    held
+        The start value of each setting the service keeps itself.
     """
 
     def __init__(
-        self, specs: Sequence[RegisterSpec], backend: RegisterBackend, *, simulated: bool
+        self,
+        specs: Sequence[RegisterSpec],
+        backend: RegisterBackend,
+        *,
+        simulated: bool,
+        held: Mapping[str, Any],
     ) -> None:
         super().__init__(description="BrightEyes-MCS board registers")
         self.backend = backend
@@ -94,14 +121,28 @@ class McsController(Controller):
         self.loop: asyncio.AbstractEventLoop | None = None
         self.tasks: set[asyncio.Task[None]] = set()
         self.pending: set[str] = set()
+        # Settings can share a register, so puts take turns: each computes
+        # its registers from the values the one before it left.
+        self.lock = asyncio.Lock()
         self.simulated = AttrR(Bool(), initial_value=simulated)
-        self.registers = Controller(ios=[RegisterIO(backend, self.read_back)])
+        self.registers = Controller(ios=[RegisterIO(backend, self.read_back, self.lock)])
         for spec in specs:
             kind = AttrRW if spec.writable else AttrR
             attribute = kind(
                 spec.datatype, io_ref=RegisterRef(name=spec.name), description=spec.description
             )
             self.registers.add_attribute(spec.name, attribute)
+        self.held = dict(held)
+        self.served = served([spec.name for spec in specs])
+        missing = [path for path in SETTINGS if path not in self.served]
+        if missing:
+            logger.info("Settings whose registers the bitfile lacks: %s", ", ".join(missing))
+        self.setting_registers = frozenset[str]().union(
+            *(SETTINGS[path].registers for path in self.served)
+        )
+        self.settings: Settings = {**defaults(), **self.held}
+        self.failing: set[str] = set()
+        self.setting_attributes = build_tree(self, self.served, SettingIO(self.put_setting))
 
     async def connect(self) -> None:
         self.loop = asyncio.get_running_loop()
@@ -145,21 +186,87 @@ class McsController(Controller):
         except Exception:
             logger.exception("Reading back register %r failed", name)
 
-    async def refresh(self, names: Sequence[str]) -> None:
-        """Update the attributes of `names` from one read of the backend.
+    async def refresh(self, names: Sequence[str]) -> bool:
+        """Update the attributes of `names` from one read of the backend; return whether it read.
 
         Nothing is updated when the backend is busy. A value an attribute
-        refuses is logged and the other attributes still update.
+        refuses is logged and the other attributes still update. The settings
+        are derived again when a register they depend on was read.
         """
         values = await self.backend.read(names)
         if values is None:
-            return
+            return False
         self.pending.difference_update(values)
         for name, value in values.items():
             try:
                 await self.registers.attributes[name].update(value)
             except Exception:
                 logger.exception("Register %r refused the value %r read back", name, value)
+        if self.setting_registers.intersection(values):
+            await self.derive_settings()
+        return True
+
+    async def put_setting(self, path: str, value: Any) -> None:
+        """Write the registers a setting sets, after checking each, and read them back.
+
+        Raises
+        ------
+        ValueError
+            When a register refuses its value, nothing having been written,
+            or when `check_put` refuses the put.
+        """
+        async with self.lock:
+            settings = {**self.settings, path: value}
+            check_put(path, settings)
+            computed = all_registers(settings)
+            values = {}
+            for name in writes(path, settings):
+                register_type = self.registers.attributes[name].datatype
+                checked = register_type.validate(computed[name])
+                # The board takes only integers for a register served as a double.
+                values[name] = int(checked) if isinstance(register_type, WholeFloat) else checked
+            if values:
+                try:
+                    await self.backend.write_many(values)
+                except Exception:
+                    for name in values:
+                        await self.read_back(name)
+                    raise
+            if SETTINGS[path].held:
+                self.held[path] = value
+            await self.show_written(values)
+
+    async def show_written(self, values: Mapping[str, Any]) -> None:
+        """Read back the registers a put wrote, or show their written values while the board is busy."""
+        if values and await self.refresh(list(values)):
+            return
+        for name, value in values.items():
+            await self.registers.attributes[name].update(value)
+        self.pending.update(values)
+        await self.derive_settings()
+
+    async def derive_settings(self) -> None:
+        """Update every setting from the register attributes and the held values.
+
+        A setting that cannot be derived keeps its value, and is logged once
+        until it can be derived again.
+        """
+        raw = {name: attribute.get() for name, attribute in self.registers.attributes.items()}
+        derived, failures = derive(raw, self.held, self.served)
+        self.settings.update(derived)
+        self.settings.update(self.held)
+        for path in self.served:
+            if path in failures:
+                continue
+            try:
+                await self.setting_attributes[path].update(self.settings[path])
+            except ValueError as error:
+                failures[path] = error
+        for path in failures.keys() - self.failing:
+            logger.warning("Cannot derive the setting %s: %s", path, failures[path])
+        for path in self.failing - failures.keys():
+            logger.info("The setting %s can be derived again", path)
+        self.failing = set(failures)
 
     async def poll_indicators(self) -> None:
         failing = False
@@ -175,6 +282,25 @@ class McsController(Controller):
                 if failing:
                     logger.info("Reading the indicator registers works again")
                 failing = False
+
+
+def check_put(path: str, settings: Settings) -> None:
+    """Refuse a put that `settings`, the settings with the put applied, cannot hold.
+
+    Raises
+    ------
+    ValueError
+        When the put makes a calibration zero, or sets the DC voltage of an
+        output that sends an auxiliary axis.
+    """
+    if path.endswith("calibration_um_per_volt") and settings[path] == 0:
+        raise ValueError(f"A calibration of zero for {path}")
+    if path.startswith("analog_out.") and path.endswith(".dc_volts"):
+        source = settings[path.removesuffix("dc_volts") + "source"]
+        if source.value.lower() in AUX_AXES:
+            raise ValueError(
+                f"The output sends {source.value}; set aux.{source.value.lower()}.position_um"
+            )
 
 
 def parse_options(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -296,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         backend = ManagerRegisters(manager)
 
-    controller = McsController(specs, backend, simulated=options.simulate)
+    controller = McsController(specs, backend, simulated=options.simulate, held={})
     try:
         # Ctrl+C, the way a service run on its own is stopped, is a clean stop.
         with contextlib.suppress(KeyboardInterrupt):

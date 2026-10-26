@@ -525,3 +525,29 @@ def tolerance(path: str, settings: Settings, steps: Mapping[str, float]) -> floa
             calibration = abs(settings[f"aux.{axis}.calibration_um_per_volt"])
             return max(steps[f"analog_output_{channel}_dc_volts"] for channel in OUTPUTS) * calibration
     return max((steps.get(register, 0.0) for register in setting.writes), default=0.0)
+
+
+def defaults() -> Settings:
+    """Return a value for every setting, for those the bitfile cannot serve.
+
+    Calibrations default to 1, so that a missing axis does not make the
+    register values of the others impossible to compute.
+    """
+    values: Settings = {}
+    for path, setting in SETTINGS.items():
+        match setting.kind:
+            case "bool":
+                values[path] = False
+            case "int":
+                values[path] = setting.minimum or 0
+            case "float":
+                values[path] = 1.0 if path.endswith("calibration_um_per_volt") else 0.0
+            case "source":
+                values[path] = Source.CONSTANT
+            case "floats":
+                values[path] = np.zeros(setting.length)
+            case "ints":
+                values[path] = np.zeros(setting.length, dtype=int)
+            case "text":
+                values[path] = ""
+    return values

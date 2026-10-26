@@ -60,7 +60,7 @@ def fake_specs() -> list[RegisterSpec]:
 
 def serve_controller(backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]) -> None:
     """Connect a controller over `backend`, run `body` on it, then disconnect it."""
-    controller = McsController(fake_specs(), backend, simulated=True)
+    controller = McsController(fake_specs(), backend, simulated=True, held={})
     controller.post_initialise()
 
     async def main() -> None:
@@ -212,7 +212,7 @@ def test_a_read_back_the_busy_board_skipped_is_retried(monkeypatch: pytest.Monke
 def test_a_failed_start_ends_serving_with_its_error() -> None:
     """Raise the error that stopped the controller connecting, instead of waiting forever."""
     controller = McsController(
-        fake_specs(), StubBackend({}, failing_reads=range(1, 2)), simulated=True
+        fake_specs(), StubBackend({}, failing_reads=range(1, 2)), simulated=True, held={}
     )
 
     with pytest.raises(RuntimeError, match="board did not answer"):
