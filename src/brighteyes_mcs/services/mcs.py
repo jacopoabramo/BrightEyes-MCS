@@ -268,9 +268,7 @@ class McsController(Controller):
         derived, failures = derive(raw, self.held, self.served)
         # An auxiliary position is held, but an output sending the axis holds
         # it too, and the board is the one to show.
-        self.held.update(
-            (path, value) for path, value in derived.items() if SETTINGS[path].held
-        )
+        self.held.update((path, value) for path, value in derived.items() if SETTINGS[path].held)
         self.settings.update(self.held)
         self.settings.update(derived)
         for path in self.served:
@@ -472,7 +470,11 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging()
     options = parse_options(argv)
     held = held_settings(options)
-    zero = [path for path, value in held.items() if path.endswith("calibration_um_per_volt") and value == 0]
+    zero = [
+        path
+        for path, value in held.items()
+        if path.endswith("calibration_um_per_volt") and value == 0
+    ]
     if zero:
         logger.error("A calibration of zero for %s", ", ".join(zero))
         return 1
