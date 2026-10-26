@@ -54,8 +54,9 @@ from brighteyes_mcs.services.settings import SettingIO, build_tree
 INDICATOR_PERIOD: Final = 0.5
 
 #: Seconds the board may take to stop once the service is asked to. A session
-#: kills a service 10 s after asking it to stop.
-STOP_DEADLINE: Final = 8.0
+#: kills a service 10 s after asking it to stop, and ending a run in progress
+#: takes up to 2 s of those.
+STOP_DEADLINE: Final = 6.0
 
 #: Seconds the service may take to become ready, or to stop serving, before it
 #: writes every thread's stack to its output. Below the 15 s a session waits
@@ -187,6 +188,7 @@ class McsController(Controller):
         await super().connect()
 
     async def disconnect(self) -> None:
+        await self.run.shutdown()
         self.loop = None
         for task in list(self.tasks):
             task.cancel()
@@ -322,12 +324,15 @@ class McsController(Controller):
         while True:
             await asyncio.sleep(INDICATOR_PERIOD)
             try:
-                await self.refresh([*self.indicators, *self.pending])
+                read = await self.refresh([*self.indicators, *self.pending])
             except Exception:
                 if not failing:
                     logger.warning("Reading the indicator registers failed", exc_info=True)
                 failing = True
+                await self.run.board_responding.update(False)
             else:
+                if read:
+                    await self.run.board_responding.update(True)
                 if failing:
                     logger.info("Reading the indicator registers works again")
                 failing = False

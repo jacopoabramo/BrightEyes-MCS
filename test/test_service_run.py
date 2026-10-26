@@ -1,6 +1,7 @@
 """Pin how the mcs service starts, ends, stops and guards a run."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -248,3 +249,39 @@ def test_a_put_waiting_while_start_prepares_is_refused() -> None:
         assert backend.values["max_pixel"] == 4
 
     serve_run(backend, body)
+
+
+def test_a_failing_indicator_read_marks_the_board_not_responding(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Mark the board as not responding while indicator reads fail, log once, and recover."""
+    backend = StubBackend(quick_registers(), failing_reads=range(2, 5))
+
+    async def body(controller: McsController) -> None:
+        await controller.run.board_responding.wait_for_value(False, timeout=2)
+        await controller.run.board_responding.wait_for_value(True, timeout=3)
+
+    with caplog.at_level(logging.WARNING, logger="brighteyes_mcs"):
+        serve_run(backend, body)
+
+    failures = [
+        record
+        for record in caplog.records
+        if record.getMessage() == "Reading the indicator registers failed"
+    ]
+    assert len(failures) == 1
+
+
+def test_disconnect_ends_a_run_in_progress() -> None:
+    """Send the stop pulse for a run in progress when the controller disconnects."""
+    backend = DictRegisters(run_specs(), quick_registers())
+    written: list[str] = []
+    backend.on_write(written.append)
+
+    async def body(controller: McsController) -> None:
+        await start_long_run(controller)
+        written.clear()
+
+    serve_run(backend, body)
+
+    assert "stop_command" in written
