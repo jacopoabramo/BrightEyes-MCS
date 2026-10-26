@@ -108,7 +108,6 @@ exclude = [
     "src/brighteyes_mcs/plugins/**",
     "test/**",
     "scripts/**",
-    "blueskyproject_mcs/**",
 ]
 
 [tool.mypy]
