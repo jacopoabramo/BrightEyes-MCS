@@ -20,6 +20,8 @@ def test_full_window_startup_and_plot_signals(tmp_path, log_directory_available)
         LOCALAPPDATA=str(tmp_path / "localappdata"),
         IPYTHONDIR=str(tmp_path / "ipython"),
         QT_QPA_PLATFORM="offscreen",
+        QT_API="pyqt6",
+        PYQTGRAPH_QT_LIB="PyQt6",
         BRIGHTEYES_LOG_DIR=str(tmp_path / "logs"),
         BRIGHTEYES_LOG_SESSION="startup-test",
     )
