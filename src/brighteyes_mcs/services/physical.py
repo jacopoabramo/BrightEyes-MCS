@@ -523,7 +523,9 @@ def tolerance(path: str, settings: Settings, steps: Mapping[str, float]) -> floa
             return steps[f"circular_scan_{axis}_volts"] * calibration
         case ["aux", axis, "position_um"]:
             calibration = abs(settings[f"aux.{axis}.calibration_um_per_volt"])
-            return max(steps[f"analog_output_{channel}_dc_volts"] for channel in OUTPUTS) * calibration
+            return (
+                max(steps[f"analog_output_{channel}_dc_volts"] for channel in OUTPUTS) * calibration
+            )
     return max((steps.get(register, 0.0) for register in setting.writes), default=0.0)
 
 

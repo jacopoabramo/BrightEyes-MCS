@@ -58,7 +58,9 @@ def fake_specs() -> list[RegisterSpec]:
     return register_specs(nifpga.Bitfile(fake_bitfile_xml(), parse_contents=True), {})
 
 
-def serve_controller(backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]) -> None:
+def serve_controller(
+    backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]
+) -> None:
     """Connect a controller over `backend`, run `body` on it, then disconnect it."""
     controller = McsController(fake_specs(), backend, simulated=True, held={})
     controller.post_initialise()

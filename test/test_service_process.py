@@ -109,9 +109,7 @@ def test_a_physical_setting_is_served_over_pva(tmp_path: Path) -> None:
     )
     try:
         client.put(f"{prefix}:Scanner:X:RangeUm", 20.0)
-        assert wait_for(
-            lambda: abs(client.get(f"{prefix}:Scanner:X:RangeUm_RBV") - 20.0) < 1e-3, 2
-        )
+        assert wait_for(lambda: abs(client.get(f"{prefix}:Scanner:X:RangeUm_RBV") - 20.0) < 1e-3, 2)
     finally:
         client.close()
         assert process.stdin is not None
