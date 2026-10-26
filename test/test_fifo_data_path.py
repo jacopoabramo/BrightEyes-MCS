@@ -8,7 +8,7 @@ import queue
 import threading
 import time
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -17,6 +17,9 @@ import pytest
 from brighteyes_mcs.acquisition.manager import create_i64_counter
 from brighteyes_mcs.acquisition.workers.detectors.spad.preprocessor import SpadDataPreProcess
 from brighteyes_mcs.acquisition.workers.fpga import NiFpgaControlProcess
+
+if TYPE_CHECKING:
+    from brighteyes_mcs.acquisition.fifo import RustFastFifoReader
 
 ReadValues = namedtuple("ReadValues", ["data", "elements_remaining"])
 
@@ -168,7 +171,7 @@ def test_preprocessor_stops_promptly_with_an_empty_queue() -> None:
 def test_rust_loop_puts_each_nonempty_read_as_its_own_tuple() -> None:
     """Put only reads that returned words, each as a (fifo, words) tuple."""
     process = control_process()
-    process.rust_fifo_reader = FakeRustReader([[1, 2], [], [3]])
+    process.rust_fifo_reader = cast("RustFastFifoReader", FakeRustReader([[1, 2], [], [3]]))
     process.rust_reader_ready.set()
     process.fifo_last_read_time["stream_out_main"] = time.perf_counter_ns()
 
@@ -230,7 +233,7 @@ def test_rust_loop_sleeps_between_reads() -> None:
     process = control_process()
     stop_event = CountingEvent()
     process.stop_event = stop_event
-    process.rust_fifo_reader = FakeRustReader([])
+    process.rust_fifo_reader = cast("RustFastFifoReader", FakeRustReader([]))
     process.rust_reader_ready.set()
     process.fifo_last_read_time["stream_out_main"] = time.perf_counter_ns()
 
