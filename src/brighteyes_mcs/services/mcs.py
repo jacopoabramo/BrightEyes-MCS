@@ -74,7 +74,8 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
     """Writes an attribute's register through the backend, holding `lock` until it is shown.
 
     `show_written` reads a written register back, so that a put waiting for
-    the lock computes from the value the board now holds.
+    the lock computes from the value the board now holds. `check` is called
+    with the register's name under the lock and raises to refuse the write.
     """
 
     def __init__(
@@ -83,12 +84,14 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
         read_back: Callable[[str], Awaitable[None]],
         show_written: Callable[[Mapping[str, Any]], Awaitable[None]],
         lock: asyncio.Lock,
+        check: Callable[[str], None],
     ) -> None:
         super().__init__()
         self.backend = backend
         self.read_back = read_back
         self.show_written = show_written
         self.lock = lock
+        self.check = check
 
     async def update(self, attr: AttrR[Any, RegisterRef]) -> None:
         await self.read_back(attr.io_ref.name)
@@ -99,6 +102,7 @@ class RegisterIO(AttributeIO[Any, RegisterRef]):
             # The attribute holds a double, but the board takes only integers.
             value = int(value)
         async with self.lock:
+            self.check(attr.io_ref.name)
             try:
                 await self.backend.write_many({attr.io_ref.name: value})
             except Exception:
@@ -147,7 +151,15 @@ class McsController(Controller):
         )
         self.simulated = AttrR(Bool(), initial_value=simulated)
         self.registers = Controller(
-            ios=[RegisterIO(backend, self.read_back, self.show_written, self.lock)]
+            ios=[
+                RegisterIO(
+                    backend,
+                    self.read_back,
+                    self.show_written,
+                    self.lock,
+                    self.run.check_register,
+                )
+            ]
         )
         for spec in specs:
             kind = AttrRW if spec.writable else AttrR
@@ -237,8 +249,11 @@ class McsController(Controller):
         ValueError
             When a register refuses its value, nothing having been written,
             or when `check_put` refuses the put.
+        RuntimeError
+            While a run is in progress and holds the setting.
         """
         async with self.lock:
+            self.run.check_setting(path)
             settings = {**self.settings, path: value}
             check_put(path, settings)
             computed = all_registers(settings)

@@ -185,3 +185,66 @@ def test_a_worker_that_stops_ends_the_run_with_an_error() -> None:
         assert controller.run.completed.get() == 0
 
     serve_run(backend, body)
+
+
+def test_puts_during_a_run_follow_the_lock_groups() -> None:
+    """Refuse group A and B puts and their raw registers during a run, and allow group C."""
+    backend = DictRegisters(run_specs(), quick_registers())
+
+    async def body(controller: McsController) -> None:
+        settings = controller.setting_attributes
+        raw = controller.registers.attributes
+        await start_long_run(controller)
+
+        for put in (
+            settings["grid.pixels"].put(8),
+            settings["scanner.x.range_um"].put(20.0),
+            raw["max_pixel"].put(8),
+            raw["start_command"].put(True),
+            controller.run.repetitions.put(2),
+        ):
+            with pytest.raises(RuntimeError, match="a run is in progress"):
+                await put
+        await settings["lasers.1.enabled"].put(True)
+        await settings["aux.x2.position_um"].put(1.0)
+        assert backend.values["max_pixel"] == 4
+        assert backend.values["laser_1_enable"] is True
+
+        await controller.run.stop()
+        await settings["grid.pixels"].put(8)
+        assert backend.values["max_pixel"] == 8
+
+    serve_run(backend, body)
+
+
+def test_reset_is_refused_during_a_run() -> None:
+    """Refuse a reset while a run is in progress."""
+    backend = DictRegisters(run_specs(), quick_registers())
+
+    async def body(controller: McsController) -> None:
+        await start_long_run(controller)
+
+        with pytest.raises(RuntimeError, match="a run is in progress"):
+            await controller.run.reset()
+
+    serve_run(backend, body)
+
+
+def test_a_put_waiting_while_start_prepares_is_refused() -> None:
+    """Refuse a group A put that waited for the lock while start prepared."""
+    backend = SlowRegisters(run_specs(), quick_registers())
+
+    async def body(controller: McsController) -> None:
+        await controller.run.save.put(False)
+        await controller.run.repetitions.put(LONG_RUN)
+
+        results = await asyncio.gather(
+            controller.run.start(),
+            controller.setting_attributes["grid.pixels"].put(8),
+            return_exceptions=True,
+        )
+
+        assert isinstance(results[1], RuntimeError)
+        assert backend.values["max_pixel"] == 4
+
+    serve_run(backend, body)
