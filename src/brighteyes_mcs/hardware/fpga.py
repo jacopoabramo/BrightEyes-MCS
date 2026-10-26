@@ -2,6 +2,7 @@
 
 import multiprocessing as mp
 import time
+from collections.abc import Callable
 
 import psutil
 import nifpga
@@ -46,6 +47,7 @@ class FpgaHandle(object):
         self.nifpga_obj = None
         self.nifpga_obj2 = None
         self.fpga_handle_process = None
+        self.write_listeners: list[Callable[[str], None]] = []
 
         if list_fifos is None:
             list_fifos = []
@@ -264,23 +266,35 @@ class FpgaHandle(object):
         mydict = self.register_read(list(self.configuration["list_registers"]), timeout)
         return mydict
 
+    def add_write_listener(self, listener: Callable[[str], None]) -> None:
+        """Call `listener` with the register name after each write that succeeds."""
+        self.write_listeners.append(listener)
+
+    def notify_write(self, register: str) -> None:
+        for listener in self.write_listeners:
+            listener(register)
+
     def register_write(self, register, data):
         if not detector_uses_nifpga_control(self.configuration["detector_model"]):
             self.configuration["initial_registers"][register] = data
+            self.notify_write(register)
             return
 
         try:
             self.nifpga_obj.registers[register].write(data)
         except Exception as e:
             print("ERROR:", register, data, e)
+            return
+        self.notify_write(register)
         # self.configuration['queueRegisterWrite'].put({register: data})
 
     def register_write_checked(self, register, data):
         """Write a register and propagate hardware failures to the caller."""
         if not detector_uses_nifpga_control(self.configuration["detector_model"]):
             self.configuration["initial_registers"][register] = data
-            return
-        self.nifpga_obj.registers[register].write(data)
+        else:
+            self.nifpga_obj.registers[register].write(data)
+        self.notify_write(register)
 
     def set_fifo_chuck_size_digital(self, fifo_chuck_size_digital):
         logger.debug("%s %s", "set_fifo_chuck_size_digital", fifo_chuck_size_digital)

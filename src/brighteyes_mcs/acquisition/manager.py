@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections.abc import Generator, Mapping
-from typing import Any
+from typing import Any, Final
 
 # from PySide6.QtCore import QObject
 
@@ -33,6 +33,44 @@ from ..acquisition import (
     SharedMemoryRegistry,
 )
 
+
+DEFAULT_REGISTERS: Final[Mapping[str, Any]] = {
+    "shutter_enable": None,
+    # 'wait time': 5000000,
+    # 'wait time': 1,
+    "debug_line_counter": None,
+    "debug_t": None,
+    "debug_z_index": None,
+    "debug_y_index": None,
+    "debug_x_index": None,
+    "debug_frame_tag": None,
+    "debug_line_tag": None,
+    "debug_pixel_tag": None,
+    "axis_calibration_volts_per_step": [0.00219727, 0.00219727, 0],
+    "axis_start_offset_volts": [-0.561798, -1.1236, 0],
+    "spad_configuration_message_length": 29,
+    "spad_configuration_message": 0,  # 33554431, #535822335,
+    "wait_initialization_time_in_us": 0,
+    "detector_fpga_holdoff_cycles": 11,
+    "time_bin_dwell_cycles": 40,
+    "tag_clock_duration_cycles": 20000,
+    "tag_turnoff_frame_counter": None,
+    "tag_turnoff_line_counter": None,
+    "tag_turnoff_pixel_counter": None,
+    "debug_z_index_2": None,
+    "debug_y_index_2": None,
+    "debug_x_index_2": None,
+    "max_time_bins_per_pixel": 10,
+    "max_circular_point": 1,
+    "max_circular_repetition": 1,
+    "max_pixel": 512,
+    "max_line": 512,
+    "max_frame": 1,
+    "stop_command": False,
+    "start_command": False,
+    # 'laser_off_after_measurement_enable' : False,
+}
+"""Register values a new manager starts from."""
 
 PISPAD23_NIFPGA_DIMENSION_OFFSETS = {
     "max_pixel": 1,
@@ -152,42 +190,7 @@ class McsManager:
         self.initial_registers_dict = self.mp_manager.dict()
         self.shared_dict = self.mp_manager.dict()
 
-        self.default_configuration = {
-            "shutter_enable": None,
-            # 'wait time': 5000000,
-            # 'wait time': 1,
-            "debug_line_counter": None,
-            "debug_t": None,
-            "debug_z_index": None,
-            "debug_y_index": None,
-            "debug_x_index": None,
-            "debug_frame_tag": None,
-            "debug_line_tag": None,
-            "debug_pixel_tag": None,
-            "axis_calibration_volts_per_step": [0.00219727, 0.00219727, 0],
-            "axis_start_offset_volts": [-0.561798, -1.1236, 0],
-            "spad_configuration_message_length": 29,
-            "spad_configuration_message": 0,  # 33554431, #535822335,
-            "wait_initialization_time_in_us": 0,
-            "detector_fpga_holdoff_cycles": 11,
-            "time_bin_dwell_cycles": 40,
-            "tag_clock_duration_cycles": 20000,
-            "tag_turnoff_frame_counter": None,
-            "tag_turnoff_line_counter": None,
-            "tag_turnoff_pixel_counter": None,
-            "debug_z_index_2": None,
-            "debug_y_index_2": None,
-            "debug_x_index_2": None,
-            "max_time_bins_per_pixel": 10,
-            "max_circular_point": 1,
-            "max_circular_repetition": 1,
-            "max_pixel": 512,
-            "max_line": 512,
-            "max_frame": 1,
-            "stop_command": False,
-            "start_command": False,
-            # 'laser_off_after_measurement_enable' : False,
-        }
+        self.default_configuration = dict(DEFAULT_REGISTERS)
         self.requested_fifo_depth = 100000
         self.actual_fifo_depth = 0
 
