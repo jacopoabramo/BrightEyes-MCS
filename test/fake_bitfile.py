@@ -36,14 +36,85 @@ REGISTERS: tuple[tuple[str, str, bool, bool], ...] = (
 """Name, datatype XML, whether an indicator, and whether internal, of each register."""
 
 
-def fake_bitfile_xml() -> str:
-    """Return the XML of a bitfile holding every register of `REGISTERS`."""
+BOOL = "<Boolean><Name>{name}</Name></Boolean>"
+I32 = "<I32><Name>{name}</Name></I32>"
+I64 = "<I64><Name>{name}</Name></I64>"
+U8 = "<U8><Name>{name}</Name></U8>"
+
+
+def array(length: int, element: str) -> str:
+    """Return the datatype XML of an array of `length` elements of type `element`."""
+    return f"<Array><Name>{{name}}</Name><Size>{length}</Size><Type>{element}</Type></Array>"
+
+
+def settings_registers() -> tuple[tuple[str, str, bool, bool], ...]:
+    """Return a control of every register the service's settings read or write."""
+    kinds: dict[str, str] = {
+        "axis_calibration_volts_per_step": array(3, FXP),
+        "axis_start_offset_volts": array(3, FXP),
+        "laser_excitation_sequence": array(24, U8),
+        "analog_a_input_selector": U8,
+        "analog_b_input_selector": U8,
+        "slave_mode_external_source_selector": U8,
+        "tag_clock_duration_cycles": I64,
+        "wait_laser_startup_cycles": I64,
+        "wait_post_frame_cycles": I64,
+    }
+    for name in (
+        "max_pixel",
+        "max_line",
+        "max_frame",
+        "max_time_bins_per_pixel",
+        "time_bin_dwell_cycles",
+        "max_circular_point",
+        "max_circular_repetition",
+    ):
+        kinds[name] = I32
+    for axis in "xyz":
+        kinds[f"circular_scan_{axis}_volts"] = array(32, FXP)
+        kinds[f"min_{axis}_volts"] = FXP
+        kinds[f"max_{axis}_volts"] = FXP
+    for channel in range(8):
+        kinds[f"analog_output_{channel}_source_selector"] = U8
+        kinds[f"analog_output_{channel}_dc_volts"] = FXP
+    for channel in range(4):
+        kinds[f"analog_a_channel_{channel}_integrate_enable"] = BOOL
+        kinds[f"analog_a_channel_{channel}_invert_enable"] = BOOL
+    for number in range(1, 5):
+        kinds[f"laser_{number}_enable"] = BOOL
+    for name in (
+        "circular_scan_enable",
+        "xy_snake_scan_enable",
+        "z_snake_scan_enable",
+        "wait_laser_first_time_only_enable",
+        "analog_a_differential_mode_enable",
+        "analog_b_differential_mode_enable",
+        "detector_49_channel_mode_enable",
+        "dummy_data_enable",
+        "slave_mode_enable",
+        "spad_vr0_enable",
+        "spad_vr1_enable",
+        "dfd_laser_sync_debug_enable",
+        "dfd_enable",
+        "stream_out_aux_enable",
+        "stream_out_main_enable",
+    ):
+        kinds[name] = BOOL
+    return tuple((name, kind, False, False) for name, kind in kinds.items())
+
+
+SETTINGS_REGISTERS = settings_registers()
+"""A control of every register the service's settings read or write."""
+
+
+def fake_bitfile_xml(registers: tuple[tuple[str, str, bool, bool], ...] = REGISTERS) -> str:
+    """Return the XML of a bitfile holding every register of `registers`."""
     registers = "".join(
         f"<Register><Name>{name}</Name><Indicator>{str(indicator).lower()}</Indicator>"
         f"<Datatype>{datatype.format(name=name)}</Datatype><Offset>0</Offset>"
         f"<Internal>{str(internal).lower()}</Internal>"
         "<AccessMayTimeout>false</AccessMayTimeout></Register>"
-        for name, datatype, indicator, internal in REGISTERS
+        for name, datatype, indicator, internal in registers
     )
     return (
         "<Bitfile><SignatureRegister>0123ABCD</SignatureRegister>"
@@ -54,8 +125,10 @@ def fake_bitfile_xml() -> str:
     )
 
 
-def write_fake_bitfile(directory: Path) -> Path:
-    """Write the fake bitfile into `directory` and return its path."""
+def write_fake_bitfile(
+    directory: Path, registers: tuple[tuple[str, str, bool, bool], ...] = REGISTERS
+) -> Path:
+    """Write a fake bitfile holding `registers` into `directory` and return its path."""
     path = directory / "fake_bitfile.xml"
-    path.write_text(fake_bitfile_xml(), encoding="utf-8")
+    path.write_text(fake_bitfile_xml(registers), encoding="utf-8")
     return path
