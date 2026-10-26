@@ -109,7 +109,7 @@ SETTINGS_REGISTERS = settings_registers()
 
 def fake_bitfile_xml(registers: tuple[tuple[str, str, bool, bool], ...] = REGISTERS) -> str:
     """Return the XML of a bitfile holding every register of `registers`."""
-    registers = "".join(
+    rows = "".join(
         f"<Register><Name>{name}</Name><Indicator>{str(indicator).lower()}</Indicator>"
         f"<Datatype>{datatype.format(name=name)}</Datatype><Offset>0</Offset>"
         f"<Internal>{str(internal).lower()}</Internal>"
@@ -121,7 +121,7 @@ def fake_bitfile_xml(registers: tuple[tuple[str, str, bool, bool], ...] = REGIST
         "<Project><CompilationResultsTree><CompilationResults><NiFpga>"
         "<BaseAddressOnDevice>0</BaseAddressOnDevice><DmaChannelAllocationList/>"
         "</NiFpga></CompilationResults></CompilationResultsTree></Project>"
-        f"<VI><RegisterList>{registers}</RegisterList></VI></Bitfile>"
+        f"<VI><RegisterList>{rows}</RegisterList></VI></Bitfile>"
     )
 
 

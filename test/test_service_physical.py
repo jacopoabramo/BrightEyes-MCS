@@ -4,7 +4,16 @@ import numpy as np
 import pytest
 
 from brighteyes_mcs.acquisition.registers import run_registers
-from brighteyes_mcs.services.physical import SETTINGS, all_registers, served, writes
+from brighteyes_mcs.services.physical import (
+    AUX_AXES,
+    SETTINGS,
+    Source,
+    all_registers,
+    derive,
+    served,
+    tolerance,
+    writes,
+)
 from test.window_settings import settings_of, window_config
 
 
@@ -52,3 +61,50 @@ def test_a_setting_missing_a_register_is_not_served() -> None:
 
     assert "pattern.point_count" not in paths
     assert "pattern.enabled" in paths
+
+
+def test_settings_read_back_from_the_registers_they_wrote() -> None:
+    """Derive every setting from its own registers within its tolerance."""
+    settings = settings_of(window_config())
+    raw = all_registers(settings)
+    held = {path: value for path, value in settings.items() if SETTINGS[path].held}
+    steps = dict.fromkeys(raw, 2**-15)
+
+    derived, failures = derive(raw, held, SETTINGS)
+
+    assert failures == {}
+    assert derived.keys() == {path for path, setting in SETTINGS.items() if not setting.held} | {
+        f"aux.{axis}.position_um" for axis in AUX_AXES
+    }
+    for path, value in derived.items():
+        allowed = tolerance(path, settings, steps) + 1e-12
+        match SETTINGS[path].kind:
+            case "floats" | "ints":
+                np.testing.assert_allclose(value, settings[path], atol=allowed, err_msg=path)
+            case "float":
+                assert value == pytest.approx(settings[path], abs=allowed), path
+            case _:
+                assert value == settings[path], path
+
+
+def test_an_unknown_selector_is_reported_not_raised() -> None:
+    """Report a source selector that names no source as a failure of that setting only."""
+    settings = settings_of(window_config())
+    raw = all_registers(settings)
+    raw["analog_output_2_source_selector"] = 12
+    held = {path: value for path, value in settings.items() if SETTINGS[path].held}
+
+    derived, failures = derive(raw, held, SETTINGS)
+
+    assert set(failures) == {"analog_out.2.source"}
+    assert derived["analog_out.3.source"] is Source.CONSTANT
+
+
+def test_an_auxiliary_position_no_output_sends_keeps_its_held_value() -> None:
+    """Keep the held position of an auxiliary axis that no output sends."""
+    settings = settings_of(window_config())
+    held = {path: value for path, value in settings.items() if SETTINGS[path].held}
+
+    derived, _ = derive(all_registers(settings), held, SETTINGS)
+
+    assert derived["aux.y2.position_um"] == 3.0
