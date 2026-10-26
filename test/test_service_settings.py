@@ -52,7 +52,9 @@ def serve_settings(
     backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]
 ) -> None:
     """Connect a controller serving the settings over `backend`, run `body`, then disconnect."""
-    controller = McsController(settings_specs(), backend, simulated=True, held=held())
+    controller = McsController(
+        settings_specs(), backend, simulated=True, held=held(), detector=window_config().detector
+    )
     controller.post_initialise()
 
     async def main() -> None:

@@ -106,6 +106,18 @@ def settings_registers() -> tuple[tuple[str, str, bool, bool], ...]:
 SETTINGS_REGISTERS = settings_registers()
 """A control of every register the service's settings read or write."""
 
+RUN_ROWS: tuple[tuple[str, str, bool, bool], ...] = (
+    ("start_command", BOOL, False, False),
+    ("stop_command", BOOL, False, False),
+    ("max_repetition", I32, False, False),
+    ("dfd_trigger_selector", U8, False, False),
+    ("debug_scan_fsm_status", I32, True, False),
+)
+"""The registers a run writes beside the settings, and the indicator the watchdog reads."""
+
+SERVICE_REGISTERS = SETTINGS_REGISTERS + RUN_ROWS
+"""Every register the service's settings and runs read or write."""
+
 
 def fake_bitfile_xml(registers: tuple[tuple[str, str, bool, bool], ...] = REGISTERS) -> str:
     """Return the XML of a bitfile holding every register of `registers`."""
