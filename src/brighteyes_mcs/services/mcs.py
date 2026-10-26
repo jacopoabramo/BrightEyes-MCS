@@ -2,22 +2,45 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import contextlib
+import faulthandler
+import threading
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
+import nifpga
 from fastcs.attributes import AttributeIO, AttributeIORef, AttrR, AttrRW, AttrW
+from fastcs.control_system import FastCS
 from fastcs.controllers import Controller
 from fastcs.datatypes import Bool
+from fastcs.transports.epics.pva.transport import EpicsPVATransport
+from redsun.services import configure_logging, identity, ready_when_reachable, wait_for_stop
 
+from brighteyes_mcs.acquisition.detectors.models import DETECTOR_SPAD_ARRAY
+from brighteyes_mcs.acquisition.manager import DEFAULT_REGISTERS, McsManager
 from brighteyes_mcs.logging_setup import logger
-from brighteyes_mcs.services.backends import RegisterBackend
-from brighteyes_mcs.services.registers import RegisterSpec
+from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, RegisterBackend
+from brighteyes_mcs.services.registers import (
+    NO_DESCRIPTION,
+    RegisterSpec,
+    load_descriptions,
+    register_specs,
+)
 
 #: Seconds between two reads of the indicator registers.
 INDICATOR_PERIOD: Final = 0.5
+
+#: Seconds the board may take to stop once the service is asked to. A session
+#: kills a service 10 s after asking it to stop.
+STOP_DEADLINE: Final = 8.0
+
+#: Seconds the service may take to become ready, or to stop serving, before it
+#: writes every thread's stack to its output. Below the 15 s a session waits
+#: for readiness, so the stacks reach the session's log.
+TRACEBACK_DELAY: Final = 10.0
 
 
 @dataclass
@@ -138,3 +161,126 @@ class McsController(Controller):
                 if failing:
                     logger.info("Reading the indicator registers works again")
                 failing = False
+
+
+def parse_options(argv: Sequence[str] | None) -> argparse.Namespace:
+    """Return the options of the service; the name and prefix default to the session's."""
+    service = identity()
+    parser = argparse.ArgumentParser(
+        prog="python -m brighteyes_mcs.services.mcs",
+        description="Serve the registers of a BrightEyes-MCS board over PVAccess.",
+    )
+    parser.add_argument("--bitfile", required=True, help="bitfile the board runs")
+    parser.add_argument("--resource", default="RIO0", help="NI resource name of the board")
+    parser.add_argument(
+        "--detector-model", default=DETECTOR_SPAD_ARRAY, help="detector the board drives"
+    )
+    parser.add_argument(
+        "--simulate", action="store_true", help="hold the registers in memory, without a board"
+    )
+    parser.add_argument(
+        "--prefix", default=service.prefix if service else "", help="PV prefix of the service"
+    )
+    parser.add_argument(
+        "--name", default=service.name if service else "mcs", help="name of the service"
+    )
+    return parser.parse_args(argv)
+
+
+async def serve(controller: McsController, prefix: str) -> None:
+    """Serve `controller` over PVAccess until the session, or Ctrl+C, stops the service."""
+    faulthandler.dump_traceback_later(TRACEBACK_DELAY)
+    controller.set_path([prefix])
+    control_system = FastCS(controller, [EpicsPVATransport()])
+    serve_task = asyncio.ensure_future(control_system.serve(interactive=False))
+    ready_task = asyncio.ensure_future(ready_when_reachable(f"{prefix}:PVI"))
+    ready_task.add_done_callback(lambda _: faulthandler.cancel_dump_traceback_later())
+    try:
+        await wait_for_stop()
+    finally:
+        faulthandler.dump_traceback_later(TRACEBACK_DELAY)
+        ready_task.cancel()
+        serve_task.cancel()
+        await asyncio.gather(serve_task, ready_task, return_exceptions=True)
+        faulthandler.cancel_dump_traceback_later()
+
+
+def stop_board(manager: McsManager | None, deadline: float) -> bool:
+    """Stop the board and the manager's processes, waiting at most `deadline` seconds.
+
+    The stop runs on a daemon thread, so a stop that hangs cannot keep the
+    process alive. Past the deadline every thread's stack is written to the
+    output and an error is logged.
+
+    Returns
+    -------
+    bool
+        Whether the stop finished in time; `True` without a manager.
+    """
+    if manager is None:
+        return True
+
+    def stop() -> None:
+        try:
+            try:
+                manager.stop_fpga()
+            finally:
+                manager.mp_manager.shutdown()
+        except Exception:
+            logger.exception("Stopping the board failed")
+
+    worker = threading.Thread(target=stop, name="stop-board", daemon=True)
+    worker.start()
+    worker.join(deadline)
+    if worker.is_alive():
+        faulthandler.dump_traceback(all_threads=True)
+        logger.error("The board did not stop within %s s", deadline)
+        return False
+    return True
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Serve the registers of the board until the session stops the service.
+
+    Returns 1 when the bitfile cannot be read or the board cannot be
+    connected, and 0 once the service has stopped.
+    """
+    configure_logging()
+    options = parse_options(argv)
+    try:
+        bitfile = nifpga.Bitfile(options.bitfile)
+    except Exception:
+        logger.exception("Cannot read the bitfile %s", options.bitfile)
+        return 1
+    specs = register_specs(bitfile, load_descriptions())
+    undescribed = [spec.name for spec in specs if spec.description == NO_DESCRIPTION]
+    if undescribed:
+        logger.info("Registers without a description: %s", ", ".join(undescribed))
+
+    manager = None
+    backend: RegisterBackend
+    if options.simulate:
+        backend = DictRegisters(specs, DEFAULT_REGISTERS)
+    else:
+        manager = McsManager(filename=options.bitfile, address=options.resource)
+        manager.set_detector_model(options.detector_model)
+        try:
+            manager.connect(dict(DEFAULT_REGISTERS))
+        except Exception:
+            logger.exception("Cannot connect to the board at %s", options.resource)
+            stop_board(manager, STOP_DEADLINE)
+            return 1
+        backend = ManagerRegisters(manager)
+
+    controller = McsController(specs, backend, simulated=options.simulate)
+    try:
+        # Ctrl+C, the way a service run on its own is stopped, is a clean stop.
+        with contextlib.suppress(KeyboardInterrupt):
+            asyncio.run(serve(controller, options.prefix.rstrip(":") or options.name))
+    finally:
+        stop_board(manager, STOP_DEADLINE)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

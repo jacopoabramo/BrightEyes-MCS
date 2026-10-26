@@ -50,6 +50,10 @@ jobs:
           test/test_thumbnail.py src/brighteyes_mcs/ui/qt/thumbnail.py
           test/test_registers.py src/brighteyes_mcs/acquisition/registers.py
           src/brighteyes_mcs/acquisition/settings.py
+          src/brighteyes_mcs/services/registers.py src/brighteyes_mcs/services/backends.py
+          src/brighteyes_mcs/services/mcs.py test/fake_bitfile.py test/test_service_registers.py
+          test/test_service_backends.py test/test_service_controller.py
+          test/test_service_process.py test/test_fpga_write_hook.py
 
   external-links:
     name: External documentation links (advisory)

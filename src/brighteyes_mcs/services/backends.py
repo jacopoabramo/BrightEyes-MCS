@@ -30,12 +30,17 @@ class DictRegisters:
     """Registers held in a dictionary, for running the service without a board.
 
     Each register starts from its datatype's initial value, overlaid by the
-    entries of `initial` that name a register.
+    entries of `initial` that name a register and hold a value other than
+    `None`, which the manager's defaults use for a register they leave unset.
     """
 
     def __init__(self, specs: Sequence[RegisterSpec], initial: Mapping[str, Any]) -> None:
         self.values: dict[str, Any] = {spec.name: spec.datatype.initial_value for spec in specs}
-        self.values.update((name, value) for name, value in initial.items() if name in self.values)
+        self.values.update(
+            (name, value)
+            for name, value in initial.items()
+            if name in self.values and value is not None
+        )
         self.listeners: list[Callable[[str], None]] = []
 
     async def read(self, names: Sequence[str]) -> dict[str, Any] | None:

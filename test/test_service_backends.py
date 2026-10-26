@@ -128,3 +128,10 @@ def test_manager_registers_listen_on_the_handle() -> None:
     asyncio.run(backend.write("max_pixel", 64))
 
     assert names == ["max_pixel"]
+
+
+def test_dict_registers_skip_defaults_left_unset() -> None:
+    """Keep a register's initial value where the defaults hold `None` for it."""
+    values = DictRegisters(fake_specs(), {"max_pixel": None}).values
+
+    assert values["max_pixel"] == 0
