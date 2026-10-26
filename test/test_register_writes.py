@@ -81,7 +81,7 @@ ANALOG_OUTPUTS = (
 )
 
 
-def make_widgets():
+def make_widgets() -> dict[str, Any]:
     """Return fresh widgets holding distinct, realistic settings."""
     values = {
         "spinBox_range_x": 12.5,
@@ -319,7 +319,8 @@ def assert_same_value(actual: Any, expected: Any, name: str) -> None:
         assert actual == expected, name
 
 
-def assert_same_writes(actual, expected):
+def assert_same_writes(actual: list[dict[str, Any]], expected: list[dict[str, Any]]) -> None:
+    """Assert that each write holds the recorded registers, in value and type."""
     assert len(actual) == len(expected)
     for actual_registers, expected_registers in zip(actual, expected, strict=True):
         assert actual_registers.keys() == expected_registers.keys()

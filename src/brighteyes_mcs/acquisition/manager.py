@@ -599,11 +599,19 @@ class McsManager:
     def prepare_run(self, config: AcquisitionConfig, *, streams: bool = True) -> dict[str, Any]:
         """Apply the settings of a run, write its registers in order and return them merged.
 
+        A register write that fails raises the FPGA session's error, after the
+        registers before it have been written.
+
         Parameters
         ----------
         streams
             Whether to select the FIFOs and write the stream enables; a start
             that only tests the scan leaves them as they are.
+
+        Raises
+        ------
+        ZeroDivisionError
+            If the time resolution is zero. No register is written then.
         """
         detector = config.detector
         self.set_spad_channels(detector.channels)
