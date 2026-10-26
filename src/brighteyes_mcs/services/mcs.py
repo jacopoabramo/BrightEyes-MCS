@@ -22,11 +22,16 @@ from redsun.services import configure_logging, identity, ready_when_reachable, w
 
 from brighteyes_mcs.acquisition.detectors.models import DETECTOR_SPAD_ARRAY
 from brighteyes_mcs.acquisition.manager import DEFAULT_REGISTERS, McsManager
+from brighteyes_mcs.acquisition.settings import DetectorConfig
 from brighteyes_mcs.logging_setup import logger
 from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, RegisterBackend
 from brighteyes_mcs.services.physical import (
     AUX_AXES,
     AXES,
+    PISPAD23_BATCH_SIZE,
+    PISPAD23_HOST,
+    PISPAD23_PORT,
+    PISPAD23_STREAM_PORT,
     SETTINGS,
     Settings,
     all_registers,
@@ -42,6 +47,7 @@ from brighteyes_mcs.services.registers import (
     load_descriptions,
     register_specs,
 )
+from brighteyes_mcs.services.run import RunController
 from brighteyes_mcs.services.settings import SettingIO, build_tree
 
 #: Seconds between two reads of the indicator registers.
@@ -114,6 +120,8 @@ class McsController(Controller):
     ----------
     held
         The start value of each setting the service keeps itself.
+    detector
+        The detector a run reads, whose channel count the settings replace.
     """
 
     def __init__(
@@ -123,6 +131,7 @@ class McsController(Controller):
         *,
         simulated: bool,
         held: Mapping[str, Any],
+        detector: DetectorConfig,
     ) -> None:
         super().__init__(description="BrightEyes-MCS board registers")
         self.backend = backend
@@ -133,6 +142,9 @@ class McsController(Controller):
         # Settings can share a register, so puts take turns: each computes
         # its registers from the values the one before it left.
         self.lock = asyncio.Lock()
+        self.run = RunController(
+            backend, self.lock, lambda: self.settings, detector, self.show_run_registers
+        )
         self.simulated = AttrR(Bool(), initial_value=simulated)
         self.registers = Controller(
             ios=[RegisterIO(backend, self.read_back, self.show_written, self.lock)]
@@ -257,6 +269,12 @@ class McsController(Controller):
             await self.registers.attributes[name].update(value)
         self.pending.update(values)
         await self.derive_settings()
+
+    async def show_run_registers(self, values: Mapping[str, Any]) -> None:
+        """Show the registers a run start wrote, leaving out those the bitfile lacks."""
+        await self.show_written(
+            {name: value for name, value in values.items() if name in self.registers.attributes}
+        )
 
     async def derive_settings(self) -> None:
         """Update every setting from the register attributes and the held values.
@@ -426,6 +444,24 @@ def held_settings(options: argparse.Namespace) -> dict[str, Any]:
     return held
 
 
+def detector_config(options: argparse.Namespace) -> DetectorConfig:
+    """Return the detector a run reads, from the options and the window's PI23 defaults.
+
+    The channel count is a placeholder, which the settings replace when a run
+    is prepared.
+    """
+    return DetectorConfig(
+        model=options.detector_model,
+        channels=25,
+        address=options.resource,
+        bitfile=options.bitfile,
+        pispad23_host=PISPAD23_HOST,
+        pispad23_port=PISPAD23_PORT,
+        pispad23_stream_port=PISPAD23_STREAM_PORT,
+        pispad23_batch_size=PISPAD23_BATCH_SIZE,
+    )
+
+
 def stop_board(manager: McsManager | None, deadline: float) -> bool:
     """Stop the board and the manager's processes, waiting at most `deadline` seconds.
 
@@ -503,7 +539,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         backend = ManagerRegisters(manager)
 
-    controller = McsController(specs, backend, simulated=options.simulate, held=held)
+    controller = McsController(
+        specs,
+        backend,
+        simulated=options.simulate,
+        held=held,
+        detector=detector_config(options),
+    )
     try:
         # Ctrl+C, the way a service run on its own is stopped, is a clean stop.
         with contextlib.suppress(KeyboardInterrupt):

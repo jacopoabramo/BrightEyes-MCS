@@ -15,6 +15,7 @@ from brighteyes_mcs.services.backends import DictRegisters, RegisterBackend, Tim
 from brighteyes_mcs.services.mcs import INDICATOR_PERIOD, McsController, serve
 from brighteyes_mcs.services.registers import RegisterSpec, register_specs
 from test.fake_bitfile import fake_bitfile_xml
+from test.window_settings import window_config
 
 
 class StubBackend(TimedRun):
@@ -62,7 +63,9 @@ def serve_controller(
     backend: RegisterBackend, body: Callable[[McsController], Awaitable[None]]
 ) -> None:
     """Connect a controller over `backend`, run `body` on it, then disconnect it."""
-    controller = McsController(fake_specs(), backend, simulated=True, held={})
+    controller = McsController(
+        fake_specs(), backend, simulated=True, held={}, detector=window_config().detector
+    )
     controller.post_initialise()
 
     async def main() -> None:
@@ -214,7 +217,11 @@ def test_a_read_back_the_busy_board_skipped_is_retried(monkeypatch: pytest.Monke
 def test_a_failed_start_ends_serving_with_its_error() -> None:
     """Raise the error that stopped the controller connecting, instead of waiting forever."""
     controller = McsController(
-        fake_specs(), StubBackend({}, failing_reads=range(1, 2)), simulated=True, held={}
+        fake_specs(),
+        StubBackend({}, failing_reads=range(1, 2)),
+        simulated=True,
+        held={},
+        detector=window_config().detector,
     )
 
     with pytest.raises(RuntimeError, match="board did not answer"):
