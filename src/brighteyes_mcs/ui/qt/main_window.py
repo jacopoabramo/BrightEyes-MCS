@@ -1928,7 +1928,7 @@ class MainWindow(QMainWindow):
             ),
         )
 
-    def _scan_options(self):
+    def _scan_options(self) -> ScanOptions:
         """Return the run flags set in the acquisition widgets."""
         return ScanOptions(
             circular_scan=self.ui.checkBox_circular.isChecked(),
@@ -4394,7 +4394,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     @trace_action
-    def test7(self):
+    def test7(self) -> None:
         """
         dummy button clicked event for test
         """
@@ -8292,7 +8292,7 @@ Have fun!
         self.LoadConfiguration()
 
     @Slot()
-    def LoadConfiguration(self, filecfg=""):
+    def LoadConfiguration(self, filecfg: str = "") -> None:
         """
         load the configuration from a .cfg file
         """
