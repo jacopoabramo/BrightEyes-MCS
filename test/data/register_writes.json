@@ -525,10 +525,10 @@
    25
   ],
   "set_trace_bins": [
-   8000
+   10
   ],
   "set_trace_sample_per_bins": [
-   200
+   168
   ]
  }
 }
