@@ -15,7 +15,7 @@ from p4p.client.thread import Context, RemoteError
 
 from brighteyes_mcs.acquisition.manager import McsManager
 from brighteyes_mcs.services.mcs import STOP_DEADLINE, stop_board
-from test.fake_bitfile import SETTINGS_REGISTERS, write_fake_bitfile
+from test.fake_bitfile import SERVICE_REGISTERS, SETTINGS_REGISTERS, write_fake_bitfile
 
 READY = "mcs ready"
 
@@ -110,6 +110,29 @@ def test_a_physical_setting_is_served_over_pva(tmp_path: Path) -> None:
     try:
         client.put(f"{prefix}:Scanner:X:RangeUm", 20.0)
         assert wait_for(lambda: abs(client.get(f"{prefix}:Scanner:X:RangeUm_RBV") - 20.0) < 1e-3, 2)
+    finally:
+        client.close()
+        assert process.stdin is not None
+        process.stdin.close()
+
+    assert process.wait(timeout=STOP_DEADLINE) == 0
+
+
+def test_a_run_started_over_pva_ends_and_is_counted(tmp_path: Path) -> None:
+    """Start a short run over PVA in simulation and see it end and be counted."""
+    bitfile = write_fake_bitfile(tmp_path, SERVICE_REGISTERS)
+    process, prefix = start_service("--simulate", "--bitfile", str(bitfile))
+    wait_for_ready(process)
+    client = Context(
+        "pva", conf={"EPICS_PVA_ADDR_LIST": "127.0.0.1", "EPICS_PVA_AUTO_ADDR_LIST": "NO"}
+    )
+    try:
+        for name, value in (("Pixels", 4), ("Lines", 4), ("Frames", 1)):
+            client.put(f"{prefix}:Grid:{name}", value)
+        client.put(f"{prefix}:Run:Save", False)
+        client.put(f"{prefix}:Run:Start", True)
+        assert wait_for(lambda: client.get(f"{prefix}:Run:Completed") == 1, 5)
+        assert not client.get(f"{prefix}:Run:Running")
     finally:
         client.close()
         assert process.stdin is not None

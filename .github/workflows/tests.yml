@@ -57,6 +57,7 @@ jobs:
           test/fake_bitfile.py test/test_service_registers.py
           test/test_service_backends.py test/test_service_controller.py
           test/test_service_process.py test/test_fpga_write_hook.py
+          src/brighteyes_mcs/services/run.py test/test_service_run.py
 
   external-links:
     name: External documentation links (advisory)
