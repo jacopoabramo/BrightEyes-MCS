@@ -148,6 +148,7 @@ def settings_of(config: AcquisitionConfig) -> Settings:
         settings[f"scanner.{axis}.extra_offset_volts"] = area.extra_offset_volts[index]
         settings[f"scanner.{axis}.min_volts"] = config.limits.minimum_volts[index]
         settings[f"scanner.{axis}.max_volts"] = config.limits.maximum_volts[index]
+    assert isinstance(config.pattern, ScanPattern)
     for axis, offsets in zip(AXES, config.pattern.offsets_um(), strict=True):
         settings[f"pattern.offsets_{axis}_um"] = padded(offsets, CIRCULAR_REGISTER_LENGTH)
     for axis, position in AUX_POSITIONS.items():

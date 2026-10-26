@@ -10,6 +10,7 @@ from brighteyes_mcs.acquisition.registers import (
     AnalogOutputs,
     AuxiliaryAxis,
     LaserSettings,
+    OffsetPattern,
     ScanArea,
     ScanLimits,
     ScanOptions,
@@ -314,3 +315,11 @@ def test_stream_selection_registers() -> None:
         "stream_out_aux_enable": True,
         "stream_out_main_enable": False,
     }
+
+
+def test_an_offset_pattern_writes_what_the_scan_pattern_writes() -> None:
+    """Write the same path registers from a pattern's offsets as from its radius."""
+    offsets = OffsetPattern(PATTERN.offsets_um(), PATTERN.calibration_um_per_volt)
+
+    for name, volts in PATTERN.registers().items():
+        np.testing.assert_allclose(offsets.registers()[name], volts)
