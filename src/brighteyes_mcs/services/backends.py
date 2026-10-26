@@ -220,17 +220,20 @@ class ManagerRegisters:
     def run_status_now(self) -> RunStatus:
         manager = self.manager
         supervisor = manager.process_supervisor
+        # The loop sets the done flag before it exits, so reading the workers
+        # first never shows a run that ended normally as a dead worker.
+        workers_alive = all(
+            supervisor.is_alive(name) for name in WORKERS if supervisor.get(name) is not None
+        )
+        fifos_complete = all(
+            manager.get_current_preview_element(fifo) >= manager.get_expected_fifo_elements(fifo)
+            for fifo in manager.activated_fifos_list
+        )
         return RunStatus(
             done=manager.acquisition_is_done(),
             almost_done=manager.acquisition_is_almost_done(),
-            fifos_complete=all(
-                manager.get_current_preview_element(fifo)
-                >= manager.get_expected_fifo_elements(fifo)
-                for fifo in manager.activated_fifos_list
-            ),
-            workers_alive=all(
-                supervisor.is_alive(name) for name in WORKERS if supervisor.get(name) is not None
-            ),
+            fifos_complete=fifos_complete,
+            workers_alive=workers_alive,
         )
 
     async def finish(self) -> str:
