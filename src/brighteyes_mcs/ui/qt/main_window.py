@@ -4399,6 +4399,9 @@ class MainWindow(QMainWindow):
         dummy button clicked event for test
         """
         logger.debug("test7() as start but no run")
+        trigger = getattr(self, "software_trigger", None)
+        if trigger is not None and trigger.active:
+            return
 
         if self.ui.checkBox_ttmActivate.isChecked():
             self.ttm_activate_change_state()

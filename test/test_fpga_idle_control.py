@@ -713,3 +713,15 @@ def test_status_update_appends_one_point_to_each_monitored_register():
     assert second_trace["values"] == [17.0]
     first_curve.setData.assert_called_once_with([1.25], [2.0])
     second_curve.setData.assert_called_once_with([1.25], [17.0])
+
+
+def test_test_start_leaves_an_active_software_trigger_alone() -> None:
+    """Refuse the test start while a software-trigger session owns the FPGA."""
+    window = MainWindow.__new__(MainWindow)
+    window.ui = MagicMock()
+    window.software_trigger = MagicMock(active=True)
+    window.initializeAcquisition = MagicMock()
+
+    window.test7()
+
+    window.initializeAcquisition.assert_not_called()
