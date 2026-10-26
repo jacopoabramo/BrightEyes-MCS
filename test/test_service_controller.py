@@ -11,13 +11,13 @@ import pytest
 from fastcs.attributes import AttrR, AttrRW, AttrW
 
 from brighteyes_mcs.services import mcs
-from brighteyes_mcs.services.backends import DictRegisters, RegisterBackend
+from brighteyes_mcs.services.backends import DictRegisters, RegisterBackend, TimedRun
 from brighteyes_mcs.services.mcs import INDICATOR_PERIOD, McsController, serve
 from brighteyes_mcs.services.registers import RegisterSpec, register_specs
 from test.fake_bitfile import fake_bitfile_xml
 
 
-class StubBackend:
+class StubBackend(TimedRun):
     """Backend whose reads return fixed values, fail, or find the board busy, by read number."""
 
     def __init__(

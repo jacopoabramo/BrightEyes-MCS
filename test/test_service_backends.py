@@ -8,14 +8,20 @@ from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import nifpga
+import numpy as np
 import pytest
 
 from brighteyes_mcs.acquisition.detectors.models import DETECTOR_PISPAD23
 from brighteyes_mcs.acquisition.manager import McsManager
+from brighteyes_mcs.acquisition.registers import run_registers
+from brighteyes_mcs.acquisition.settings import AcquisitionConfig
 from brighteyes_mcs.hardware.fpga import FpgaHandle
-from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters
+from brighteyes_mcs.services.backends import DictRegisters, ManagerRegisters, RunStatus
+from brighteyes_mcs.services.physical import RunSettings, run_config
 from brighteyes_mcs.services.registers import RegisterSpec, register_specs
 from test.fake_bitfile import fake_bitfile_xml
+from test.test_service_controller import StubBackend
+from test.window_settings import settings_of, window_config
 
 
 class Register:
@@ -170,3 +176,115 @@ def test_a_stuck_write_does_not_hold_up_the_exit(monkeypatch: pytest.MonkeyPatch
         assert time.monotonic() - started < 1
     finally:
         release.set()
+
+
+def quick_config() -> AcquisitionConfig:
+    """Return the configuration of a run over a 4 by 4 grid of one frame, which takes 1.3 ms."""
+    settings = settings_of(window_config())
+    settings.update({"grid.pixels": 4, "grid.lines": 4, "grid.frames": 1})
+    return run_config(settings, RunSettings(1, "", False), window_config().detector)
+
+
+def test_a_simulated_run_writes_the_run_registers_then_the_start_pulse() -> None:
+    """Write each run register group in order, then the start pulse, through write_many."""
+    backend = StubBackend({})
+    config = quick_config()
+
+    async def run() -> None:
+        await backend.prepare_run(config)
+        await backend.start()
+
+    asyncio.run(run())
+
+    expected = [
+        *run_registers(config),
+        {"stop_command": False, "start_command": True},
+        {"start_command": False},
+    ]
+    assert [group.keys() for group in backend.written] == [group.keys() for group in expected]
+    for written, group in zip(backend.written, expected, strict=True):
+        for name, value in group.items():
+            np.testing.assert_array_equal(written[name], value, err_msg=name)
+
+
+def test_a_simulated_run_is_done_once_its_duration_has_passed() -> None:
+    """Report a simulated run as not done before start and done after its duration."""
+    backend = DictRegisters(fake_specs(), {})
+
+    async def run() -> tuple[RunStatus, RunStatus]:
+        await backend.prepare_run(quick_config())
+        before = await backend.run_status()
+        await backend.start()
+        await asyncio.sleep(0.05)
+        return before, await backend.run_status()
+
+    before, after = asyncio.run(run())
+
+    assert before.done is False
+    assert after == RunStatus(done=True, almost_done=True, fifos_complete=True, workers_alive=True)
+
+
+def test_manager_registers_start_a_run_in_the_window_order() -> None:
+    """Reset the board, prepare, clear the done events, start the pipeline, then pulse start."""
+    manager = MagicMock(spec=McsManager)
+    backend = ManagerRegisters(manager)
+    config = quick_config()
+
+    async def run() -> None:
+        await backend.reset()
+        await backend.prepare_run(config)
+        await backend.run_pipeline()
+        await backend.start()
+
+    asyncio.run(run())
+
+    assert [name for name, _, _ in manager.mock_calls] == [
+        "quick_reset_fpga",
+        "prepare_run",
+        "acquisition_done_reset",
+        "acquisition_almost_done_reset",
+        "run",
+        "start",
+    ]
+    assert manager.prepare_run.call_args == call(config)
+
+
+def test_manager_registers_finish_stops_the_pipeline_when_the_reset_fails() -> None:
+    """Still stop the pipeline and the acquisition when the reset raises, then raise its error."""
+    manager = MagicMock(spec=McsManager)
+    manager.quick_reset_fpga.side_effect = TimeoutError("not idle")
+    backend = ManagerRegisters(manager)
+
+    with pytest.raises(TimeoutError, match="not idle"):
+        asyncio.run(backend.finish())
+
+    manager.stop_preview.assert_called_once_with()
+    manager.stop_acquisition.assert_called_once_with()
+
+
+def test_manager_registers_report_a_dead_worker() -> None:
+    """Report the workers as not alive when a started data process has stopped."""
+    manager = MagicMock(spec=McsManager)
+    manager.activated_fifos_list = []
+    manager.process_supervisor = MagicMock()
+    manager.process_supervisor.is_alive.side_effect = lambda name: name != "preprocess"
+    backend = ManagerRegisters(manager)
+
+    status = asyncio.run(backend.run_status())
+
+    assert status.workers_alive is False
+
+
+def test_manager_registers_ignore_a_worker_never_started() -> None:
+    """Report the workers as alive when the run registered none, as with no detector."""
+    manager = MagicMock(spec=McsManager)
+    manager.activated_fifos_list = []
+    manager.process_supervisor = MagicMock()
+    manager.process_supervisor.get.return_value = None
+    manager.process_supervisor.is_alive.return_value = False
+    backend = ManagerRegisters(manager)
+
+    status = asyncio.run(backend.run_status())
+
+    assert status.workers_alive is True
+    assert status.fifos_complete is True
