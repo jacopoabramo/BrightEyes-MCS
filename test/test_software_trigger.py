@@ -379,6 +379,34 @@ def test_worker_failure_fails_the_session_from_the_loop(failure: str) -> None:
     assert ("disk full" if failure == "raw_writer_error" else "receiver") in session.error
 
 
+def test_stop_timeout_warns_and_the_late_pass_records_no_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Return from a timed-out stop with a warning, and ignore worker exits the stop caused."""
+    manager, session = make_session()
+    entered, release = threading.Event(), threading.Event()
+
+    def blocked_reset() -> None:
+        entered.set()
+        release.wait(5)
+
+    manager.quick_reset_fpga.side_effect = blocked_reset
+    session.start()
+    session.request_trigger()
+    assert entered.wait(5)
+    with caplog.at_level("WARNING"):
+        session.stop(timeout=0.05)
+    assert session.running
+    assert "still running" in caplog.text
+    manager.process_supervisor.get.side_effect = (
+        lambda name: SimpleNamespace(exitcode=1) if name == "receiver" else None
+    )
+    release.set()
+    wait_until(lambda: not session.running)
+    assert session.state != "error"
+    assert session.error == ""
+
+
 def test_stop_ends_the_loop_and_is_safe_to_repeat() -> None:
     """End the loop on stop, and accept a stop before start or a second stop."""
     manager, session = make_session()

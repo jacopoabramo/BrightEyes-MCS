@@ -223,10 +223,11 @@ class SoftwareTriggerController:
     def refresh(self) -> None:
         if not self.active or self.stopping or not self.timer.isActive():
             return
-        if self.session.state == "error":
-            self.fail(self.session.error)
-        else:
+        if self.session.state != "error":
             self.update_controls()
+        elif not self.session.running:
+            # The loop sets the state before the message, and it is done only once it has ended.
+            self.fail(self.session.error)
 
     def fail(self, error: BaseException | str) -> None:
         # Stopped first, so a tick before the window finishes stopping cannot fail twice.
